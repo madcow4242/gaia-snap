@@ -1,0 +1,153 @@
+name: amd-gaia
+title: AMD GAIA Desktop Environment
+version: '0.19.0'
+summary: GAIA local AI agent framework with hardware acceleration.
+description: |
+  GAIA is an advanced local AI worker orchestration desktop environment.
+  This package features fully integrated networking infrastructure patches,
+  bypasses container isolation limits, and natively embeds the custom
+  Network Wizard agent framework suite out of the box.
+
+license: MIT
+contact:
+  - https://github.com/amd/gaia/issues
+  - gaia@amd.com
+  - kevin.cazabon@canonical.com
+issues: https://github.com/amd/gaia/issues
+website: https://github.com/amd/gaia
+source-code: https://github.com/amd/gaia
+donation: https://github.com/amd/gaia
+
+grade: stable
+confinement: strict
+base: core24
+
+icon: usr/share/pixmaps/amd-gaia.png
+
+# SILENCE FALSE POSITIVES: Suppress all identified dynamic machine learning libraries
+lint:
+  ignore:
+    - library:
+        - usr/lib/x86_64-linux-gnu/libGLX_mesa.so.0.0.0
+        - usr/lib/x86_64-linux-gnu/libicuio.so.74.2
+        - usr/lib/x86_64-linux-gnu/libicutest.so.74.2
+        - usr/lib/x86_64-linux-gnu/libvulkan.so.1.3.275
+        - usr/lib/x86_64-linux-gnu/libXxf86vm.so.1.0.0
+        - usr/lib/x86_64-linux-gnu/libicutu.so.74.2
+        - usr/lib/x86_64-linux-gnu/libxcb-glx.so.0.0.0
+        - usr/lib/x86_64-linux-gnu/libicui18n.so.74.2
+        - usr/lib/x86_64-linux-gnu/libproxy.so.0.5.4
+        - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_transport_libfabric.so.3
+        - lib/python3.12/site-packages/torch/lib/libcaffe2_nvrtc.so
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libcheckpoint.so
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libcufftw.so.12
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libcufile_rdma.so.1
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libcusolverMg.so.12
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libnvblas.so.13
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libnvperf_host.so
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libnvperf_target.so
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libnvrtc-builtins.alt.so.13.0
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libnvrtc-builtins.so.13.0
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libnvrtc.alt.so.13
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libnvtx3interop.so.1
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libpcsamplingutil.so
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libcusolver.so.12
+        - lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_adv.so.9
+        - lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_cnn.so.9
+        - lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_engines_precompiled.so.9
+        - lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_engines_runtime_compiled.so.9
+        - lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_heuristic.so.9
+        - lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_ops.so.9
+        - lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_graph.so.9
+        - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_bootstrap_mpi.so.3
+        - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_bootstrap_pmi.so.3
+        - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_bootstrap_pmi2.so.3
+        - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_bootstrap_pmix.so.3
+        - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_bootstrap_shmem.so.3
+        - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_bootstrap_uid.so.3
+        - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_transport_ibdevx.so.3
+        - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_transport_ibgda.so.3
+        - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_transport_ibrc.so.3
+        - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_transport_ucx.so.3
+        - lib/python3.12/site-packages/torch/lib/libtorch_cuda_linalg.so
+        - lib/python3.12/site-packages/torch/lib/libtorch_global_deps.so
+
+apps:
+  amd-gaia:
+    command: bin/gaia-launcher.sh
+    extensions: [gnome]
+    desktop: usr/share/applications/amd-gaia.desktop
+    plugs:
+      - network
+      - network-bind
+      - home
+      - x11
+      - desktop
+      - desktop-legacy
+      - opengl
+      - gsettings
+      - browser-support
+
+parts:
+  # PART 1: UI Desktop Archive Extraction
+  gaia-desktop:
+    plugin: dump
+    source: https://github.com/amd/gaia/releases/download/v0.19.0/gaia-agent-ui-0.19.0-amd64.deb
+    source-type: deb
+    stage-packages:
+      - libdrm2
+      - libgl1-mesa-dri
+      - libglx-mesa0
+      - libproxy1v5
+    override-build: |
+      craftctl default
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/share/pixmaps"
+      TARGET_ICON=$(find "${CRAFT_PART_INSTALL}/usr/share" -type f -name "*.png" | head -n 1)
+      if [ -n "$TARGET_ICON" ]; then
+         ln -sf "$TARGET_ICON" "${CRAFT_PART_INSTALL}/usr/share/pixmaps/amd-gaia.png"
+      fi
+      
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/share/applications"
+      TARGET_DESKTOP=$(find "${CRAFT_PART_INSTALL}/usr/share" -type f -name "*.desktop" | head -n 1)
+      if [ -n "$TARGET_DESKTOP" ]; then
+         cp -av "$TARGET_DESKTOP" "${CRAFT_PART_INSTALL}/usr/share/applications/amd-gaia.desktop"
+         sed -i 's/^Icon=.*/Icon=amd-gaia/' "${CRAFT_PART_INSTALL}/usr/share/applications/amd-gaia.desktop"
+         sed -i 's/^Exec=.*/Exec=amd-gaia/' "${CRAFT_PART_INSTALL}/usr/share/applications/amd-gaia.desktop"
+      fi
+
+  # PART 2: Python Framework Backend Compilation
+  gaia-backend:
+    plugin: python
+    source: https://github.com/amd/gaia.git
+    source-tag: v0.19.0
+    override-pull: |
+      craftctl default
+      echo "-e .[ui]" > "${CRAFT_PART_SRC}/requirements-extras.txt"
+    python-requirements:
+      - requirements-extras.txt
+
+  # PART 3: Sideload local configuration scripts
+  gaia-sideloads:
+    plugin: dump
+    source: .
+    organize:
+      gaia-launcher.sh: bin/gaia-launcher.sh
+    stage:
+      - bin/gaia-launcher.sh
+      - usr/share/gaia-agents/network-wizard/
+      - gaia/
+      - usr/share/libdrm/
+    prime:
+      - bin/gaia-launcher.sh
+      - usr/share/gaia-agents/network-wizard/
+      - gaia/
+      - usr/share/libdrm/
+    override-build: |
+      craftctl default
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/share/libdrm"
+      cp -av /usr/share/libdrm/amdgpu.ids "${CRAFT_PART_INSTALL}/usr/share/libdrm/" 2>/dev/null || true
+      
+      # GUARANTEED SEED TARGET: Force copy the script into the exact internal path destination
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/share/gaia-agents/network-wizard"
+      cp -av "${CRAFT_PART_SRC}/network-wizard/agent.py" "${CRAFT_PART_INSTALL}/usr/share/gaia-agents/network-wizard/"
+
