@@ -1,5 +1,7 @@
 # GAIA Desktop Framework Engine (Snap Build Environment)
 
+Gaia version: v0.19.0
+
 This repository contains the **un-official** Snap encapsulation environment recipes for **GAIA** , an advanced local AI worker orchestration architecture featuring multi-agent execution frameworks and hardware-accelerated machine learning layers.
 
 Check out the [GAIA Repository](https://github.com/amd/gaia) on GitHub.
