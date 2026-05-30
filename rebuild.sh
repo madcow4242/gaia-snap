@@ -9,8 +9,13 @@ echo "🚀 Autonomous mode locked in. You can walk away!"
 echo "🧹 [1/6] Purging old tracking states universally..."
 rm -rf "$HOME/snap/amd-gaia/common/.cache/" "$HOME/snap/amd-gaia/current/.cache/"
 
-echo "🧼 [2/6] Deep cleaning all Snapcraft cache layers..."
-sudo snapcraft clean
+if [ "$1" == "--clean" ]; then
+    echo "⚙️ [2/6] Deep cleaning ALL Snapcraft cache layers from scratch..."
+    sudo snapcraft clean
+else
+    echo "⚙️ [2/6] Incremental Mode: Resetting Python backend module targets only..."
+    sudo snapcraft clean gaia-backend
+fi
 
 echo "📦 [3/6] Compiling and packaging fresh production Snap..."
 sudo snapcraft pack
