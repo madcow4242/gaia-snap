@@ -34,6 +34,7 @@ CONF_GROQ=$(get_snap_value "groq-key")
 
 # Dynamically parse the target configuration setting from the snap ledger metadata
 export GAIA_LLM_URL="${CONF_URL:-http://127.0.0.1:13305}"
+export GAIA_LLM_EXTERNAL_URL="$GAIA_LLM_URL"
 
 pkill -f "socat TCP-LISTEN" 2>/dev/null || true
 

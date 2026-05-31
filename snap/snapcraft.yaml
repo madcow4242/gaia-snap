@@ -1,5 +1,5 @@
 # =====================================================================
-# 🚨 AI DEVELOPER GUARDRAIL: REGRESSION PREVENTION DIRECTIVE
+# ? AI DEVELOPER GUARDRAIL: REGRESSION PREVENTION DIRECTIVE
 # - CRITICAL: When updating this code, perform a strict regression audit.
 # - COMPARE against the prior iteration line-by-line before suggesting edits.
 # - DO NOT drop or modify ANY build plugs, container layout parameters,
@@ -31,7 +31,8 @@ grade: stable
 confinement: strict
 base: core24
 
-icon: usr/share/pixmaps/amd-gaia.png
+# 🎯 UNIVERSAL ICON SPEC: This single line handles both the App Store and desktop launchers in core24
+icon: snap/gui/amd-gaia.png
 
 # SILENCE FALSE POSITIVES: Suppress all identified dynamic machine learning libraries
 lint:
@@ -59,7 +60,6 @@ lint:
         - lib/python3.12/site-packages/nvidia/cu13/lib/libnvrtc-builtins.alt.so.13.0
         - lib/python3.12/site-packages/nvidia/cu13/lib/libnvrtc-builtins.so.13.0
         - lib/python3.12/site-packages/nvidia/cu13/lib/libnvrtc.alt.so.13
-        - lib/python3.12/site-packages/nvidia/cu13/lib/libnvtx3interop.so.1
         - lib/python3.12/site-packages/nvidia/cu13/lib/libpcsamplingutil.so
         - lib/python3.12/site-packages/nvidia/cu13/lib/libcusolver.so.12
         - lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_adv.so.9
@@ -86,6 +86,7 @@ apps:
   amd-gaia:
     command: bin/gaia-launcher.sh
     extensions: [gnome]
+    # Removed the illegal 'icon' sub-entry to pass core24 validation checks
     desktop: usr/share/applications/amd-gaia.desktop
     plugs:
       - network
@@ -111,7 +112,7 @@ parts:
       - libgl1-mesa-dri
       - libglx-mesa0
       - libproxy1v5
-      - chromium-browser  # FIXED: Bundling standard sandbox browser components for backend tools
+      - chromium-browser
       - chromium-codecs-ffmpeg-extra
     override-build: |
       craftctl default
@@ -128,6 +129,9 @@ parts:
          sed -i 's/^Icon=.*/Icon=amd-gaia/' "${CRAFT_PART_INSTALL}/usr/share/applications/amd-gaia.desktop"
          sed -i 's/^Exec=.*/Exec=amd-gaia/' "${CRAFT_PART_INSTALL}/usr/share/applications/amd-gaia.desktop"
       fi
+      
+      # fix the icon
+      sed -i 's/^Icon=.*/Icon=amd-gaia/' "${CRAFT_PART_INSTALL}/usr/share/applications/amd-gaia.desktop"
 
   # PART 2: Python Framework Backend Compilation
   gaia-backend:
@@ -190,4 +194,3 @@ passthrough:
       groq-key: ""
       tavily-key: ""
       serper-key: ""
-
