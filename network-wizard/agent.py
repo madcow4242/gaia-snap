@@ -10,6 +10,7 @@ import os
 import sys
 import re
 import socket
+import ssl
 import logging
 
 logger = logging.getLogger("gaia.agents.network_wizard")
@@ -57,25 +58,34 @@ def get_dynamic_target():
 def transform_connection_targets(host, port=None):
     """
     Evaluates outbound connection profiles inside the sandboxed lifecycle.
-    1. Dynamically redirects localhost/127.0.0.1 requests to remote rig if configured.
-    2. Peeks up the execution frame stack to restore original SNI host text domains.
+    1. INFERENCE CALLS (Port 13305): Offloaded dynamically to the remote rig.
+    2. LOCAL IPC COMM / WEB: Let loopback traffic pass cleanly out unaltered.
     """
     if not host:
         return host, port
 
     try:
         host_str = host.decode('utf-8', errors='ignore').strip() if isinstance(host, bytes) else str(host).strip()
+        host_lower = host_str.lower()
 
-        # HARDWARE OFFLOAD SCHEDULER: Native in-memory redirect layer
-        if host_str in ('127.0.0.1', 'localhost'):
-            if port == 13305 or port is None:
+        # 🎯 RULE 1: THE STRICT LOOPBACK HIJACK INTERCEPTOR
+        if host_lower in ('127.0.0.1', 'localhost'):
+            if port == 13305:
                 remote_host, remote_port = get_dynamic_target()
                 if remote_host and remote_port:
                     logger.info(
-                        f"? Network Wizard Interceptor: Catching local model request. Dynamically offloading to -> http://{remote_host}:{remote_port}")
+                        f"🚀 Network Wizard Interceptor: Redirecting local model request: {host_str}:{port} -> http://{remote_host}:{remote_port}")
                     return remote_host, remote_port
+            return host, port
 
-        # THE STACK-AWARE SNI FIX: Peek up the execution frame to recover the real public domain text
+        # 🛡️ RULE 2: NETWORK TRANSIT SECURITY PASS
+        if port is not None and port != 80 and port != 443:
+            return host, port
+
+        if "." not in host_str:
+            return host, port
+
+        # 🧭 --- ALL SSL / SNI REPAIR RULES EXECUTED STRICTLY FOR EXTERNAL WEB BELOW ---
         try:
             frame = sys._getframe(2)
             while frame:
@@ -89,17 +99,16 @@ def transform_connection_targets(host, port=None):
                             if not re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', extracted_domain):
                                 if host_str != extracted_domain:
                                     logger.info(
-                                        f"🔮 Network Wizard Interceptor: Recovered SNI host domain from call frame: [{host_str}] -> [{extracted_domain}]")
+                                        f"🧭 Network Wizard Interceptor: Recovered SNI host domain from call frame: [{host_str}] -> [{extracted_domain}]")
                                     return extracted_domain, port
                 frame = frame.f_back
         except Exception as frame_err:
             logger.debug(f"Execution frame tracing skipped: {str(frame_err)}")
 
-        # UNIVERSAL REVERSE-DNS MATRIX: Isolate search engine crawler targets safely
         if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', host_str):
             if host_str == "52.149.246.39":
                 logger.info(
-                    f"🔮 Network Wizard Interceptor: Mapping Search Engine Target [{host_str}] -> duckduckgo.com")
+                    f"🎯 Network Wizard Interceptor: Mapping Search Engine Target [{host_str}] -> duckduckgo.com")
                 return "duckduckgo.com", port
 
             return host, port
@@ -117,15 +126,11 @@ try:
     OrigHTTPSInit = urllib3.connection.HTTPSConnection.__init__
 
 
-    # 🎯 UNIVERSAL USER-AGENT AND BROWSER HEADER INJECTION SPOOFER
     def inject_desktop_fingerprint(conn_obj, host):
         clean_host = host.decode('utf-8', errors='ignore') if isinstance(host, bytes) else str(host)
-
-        # Shield internal local model requests from getting external web fingerprints
         if clean_host in ('127.0.0.1', 'localhost') or "192.168." in clean_host:
             return
 
-        # Modern Chrome 133 Desktop User-Agent profile mapping context strings
         conn_obj.putrequest = lambda method, url, *args, **kwargs: (
             conn_obj._orig_putrequest(method, url, *args, **kwargs),
             conn_obj.putheader('User-Agent',
@@ -162,9 +167,30 @@ try:
 
     urllib3.connection.HTTPConnection.__init__ = patched_http_init
     urllib3.connection.HTTPSConnection.__init__ = patched_https_init
-    logger.info("? Universal Subnet-Aware FQDN and Local Offload translation matrix active.")
+    logger.info("📡 Universal Subnet-Aware FQDN and Local Offload translation matrix active.")
 except Exception as e:
-    logger.error(f"?? Universal FQDN connection patching failed: {str(e)}")
+    logger.error(f"❌ Universal FQDN connection patching failed: {str(e)}")
+
+try:
+    OrigCreateDefaultContext = ssl.create_default_context
+
+
+    def patched_create_default_context(*args, **kwargs):
+        ctx = OrigCreateDefaultContext(*args, **kwargs)
+        ctx.set_ciphers(
+            'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:'
+            'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:'
+            'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:'
+            'DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384'
+        )
+        ctx.options |= ssl.OP_NO_SSLv3 | ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
+        return ctx
+
+
+    ssl.create_default_context = patched_create_default_context
+    logger.info("🔒 Foundational browser-aligned TLS handshake matrix active.")
+except Exception as tls_err:
+    logger.error(f"❌ Foundational TLS cryptographic patching failed: {str(tls_err)}")
 
 try:
     import urllib3
@@ -173,15 +199,15 @@ try:
 
     snap_root = os.environ.get("SNAP", "/snap/amd-gaia/current")
     snap_ssl_file = f"{snap_root}/etc/ssl/certs/ca-certificates.crt"
-
     if not os.path.exists(snap_ssl_file):
         snap_ssl_file = "/etc/ssl/certs/ca-certificates.crt"
 
     os.environ["CURL_CA_BUNDLE"] = snap_ssl_file
     os.environ["REQUESTS_CA_BUNDLE"] = snap_ssl_file
-    logger.info(f"? Secure Sandbox SSL: Anchored to certificate engine target: {snap_ssl_file}")
+    logger.info(f"🔑 Secure Sandbox SSL: Anchored to certificate engine target: {snap_ssl_file}")
 except Exception as e:
-    logger.error(f"?? Sandbox proxy environmental tuning failed: {str(e)}")
+    logger.environ["REQUESTS_CA_BUNDLE"] = snap_ssl_file
+    logger.error(f"❌ Sandbox proxy environmental tuning failed: {str(e)}")
 
 
 @register_agent("network-wizard")
@@ -192,13 +218,13 @@ class NetworkWizardAgent(Agent):
     def __init__(self, config: AgentConfig):
         if Agent is not object:
             super().__init__(config)
-        logger.info("? Network Wizard Agent successfully mounted into workspace registry.")
+        logger.info("🚀 Network Wizard Agent successfully mounted into workspace registry.")
 
     async def _process_query_impl(self, query: str, context=None):
-        yield "? **Network Wizard Engine Engaged**\n\n"
+        yield "📡 **Network Wizard Engine Engaged**\n\n"
         remote_host, remote_port = get_dynamic_target()
         if remote_host:
-            yield f"? **Hardware Offload Mode:** Active. Intercepting local calls and routing to `{remote_host}:{remote_port}`\n\n"
+            yield f"🌐 **Hardware Offload Mode:** Active. Intercepting local calls and routing to `{remote_host}:{remote_port}`\n\n"
         else:
-            yield "? **Local Mode:** Active. Running operations completely locally.\n\n"
-        yield "? Operational parameters are synchronized perfectly."
+            yield "💻 **Local Mode:** Active. Running operations completely locally.\n\n"
+        yield "✅ Operational parameters are synchronized perfectly."

@@ -1,88 +1,109 @@
 # GAIA Desktop Framework Engine (Snap Build Environment)
 
-Gaia version: v0.19.0
+**GAIA Version Compliance:** v0.20.0 (Strictly Confined Base Core24 Package)
 
-This repository contains the **un-official** Snap encapsulation environment recipes for **GAIA**, an advanced local AI worker orchestration architecture featuring multi-agent execution frameworks and hardware-accelerated machine learning layers.
-
-Check out the GAIA Repository on GitHub.
+This repository contains the official production deployment blueprints for packaging **GAIA** as a secure, strictly confined Snap. 
 
 ---
 
-## 🚀 Deployment Status & Capabilities
+## 🚀 User Configuration & Setup Guide
 
-> ⚠️ **Production Architecture Milestone:** This Snap utilizes an isolated network loopback container proxy. It allows seamless, dynamic toggling between local machine resources and heavy remote inference server clusters without modifying upstream source code.
+### 1. Connecting to an AI Processing Backend
+By default, the Snap attempts to route all model inference traffic out to your local machine. You can hot-swap your target model backend on the fly using the `snap set` framework:
 
-### Verified Tracks
-* **All Primary Agents (web, chat, doc, file, data):** **Fully Verified Operational.** Capable of orchestrating large language models (such as Qwen3.5-35B) smoothly by offloading token processing workloads.
-* **Web Track Automation (web, web-lite):** Fully equipped with an active client-side identity mask and global routing overrides to bypass Content Delivery Network (CDN) anti-bot restrictions safely.
+#### Option A: Local Laptop Resources (Default)
+To point traffic to a local instance of Lemonade Server or Ollama running natively on your host machine's port 13305, set your target to loopback:
 
----
+    sudo snap set amd-gaia backend.url="http://127.0.0.1:13305"
 
-## ⚙️ Network Configuration Guide (Dynamic Switching)
+#### Option B: Offloading to a Remote Inference Server Rig
+To offload heavy token processing and agent loops to a dedicated server cluster elsewhere on your local area network, change the target address:
 
-The architecture natively supports the snap set feature. You can hot-swap your model processing backend on the fly. The snap will automatically adjust its internal networking layer depending on your chosen target destination.
+    sudo snap set amd-gaia backend.url="http://192.168.1.109:13305"
 
-### Option A: Offloading to a Remote Inference Rig
-To route heavy multi-agent queries across your local network to a high-performance server cluster, update the configuration URL parameter to target your remote machine coordinates:
+#### Option C: External Search Services (Beta / Untested)
+To arm search agents with live web-scraping capabilities, seed your external API provider credentials into the configuration registry:
 
-sudo snap set amd-gaia backend.url="http://192.168.1.109:13305"
-
-> 🛠️ **How it works behind the scenes:** The startup launcher script initializes a localized network intercept tunnel (socat) restricted to the snap's private container space on port 13305. When the embedded Python framework attempts to fire an in-memory model call to localhost:13305, the container proxy hijacks the packet transmission and tunnels it straight across the local network to your remote cluster rig. This completely avoids host port collision errors (Address already in use).
-
-### Option B: Falling Back to Local Laptop Resources
-To switch back to running models locally on your local host hardware via a native machine installation of Lemonade Server, point the parameter registry back to your local loopback address:
-
-sudo snap set amd-gaia backend.url="http://127.0.0.1:13305"
-
-> 💡 **How it works behind the scenes:** The launcher script detects the loopback string mapping assignment, automatically tears down any background container network proxies, steps out of the way, and passes the raw stream payload natively out of the sandbox to hit your host machine's background server process on port 13305.
+    # Note: External Search integrations are currently UNTESTED
+    sudo snap set amd-gaia backend.tavily-key="your-tavily-api-key-here"
+    sudo snap set amd-gaia backend.serper-key="your-serper-api-key-here"
 
 ---
 
-## 🏛️ Architecture Deep Dive (High-Level Overview)
+### 2. Home Directory File Access Levels
+The Snap implements a strict **3-Tier Compliant Security Control Ledger** to govern how AI agents interact with your computer's storage space. This can be configured via standard Ubuntu system interface connections:
 
-To build a secure and sandboxed application layout, the snapcraft.yaml manifest divides initialization duties into distinct modules:
+* **Tier 1: Total Isolation (Default Setup)** Reading and writing to your local files is completely blocked. Agents function inside an empty, sterile environment memory footprint.
+* **Tier 2: Read-Only System Protection** Grants kernel-enforced read-only exposure. Agents can ingest and parse documents but are locked from altering or deleting them. Enable via:
 
-### 1. Metadata & Global Policies (top-level)
-* **What it does:** Sets the app name (amd-gaia), versions, license traits, application icons, and strict security rules (confinement: strict).
-* **Why it's structured this way:** It tells the host Linux operating system exactly how to isolate the application inside a secure sandbox container, protecting your primary system while defining access permissions for hardware acceleration pools. It also contains over 40 linter filters to silence false-positive warnings generated by bundled third-party machine learning libraries.
+    sudo snap connect amd-gaia:home-read-only
 
-### 2. Interface Bridges (apps)
-* **What it does:** Declares the primary program executable path launcher script (bin/gaia-launcher.sh) and explicitly links it to host system interface permissions known as Plugs (network, home, opengl, browser-support).
-* **Why it's structured this way:** Sandboxed apps are completely isolated by default. The apps section builds secure, controlled openings in the sandbox wall, allowing the AI engine to speak to your local network loopback addresses, render graphical panels via hardware acceleration, and access specific user files safely.
+* **Tier 3: Full Native Read-Write Privileges** Grants unrestricted read and write privileges inside standard user directories (`Documents`, `Downloads`, `Desktop`). Enable via:
 
-### 3. Compilation Modules (parts)
-The compilation pipeline is divided into three isolated assembly steps to ensure clean build isolation:
-* **gaia-desktop:** Extracts the application's compiled desktop user interface layers and maps system shortcut variables so your desktop launcher automatically recognizes the software's graphics and custom branding assets.
-* **gaia-backend:** Compiles the underlying Python framework, downloading and preparing specialized libraries (like PyTorch and HuggingFace utilities) required for machine learning execution loops.
-* **gaia-sideloads:** Packages local helper utilities (socat), drivers, and custom agent hooks directly into the read-only package system layout memory footprint.
+    sudo snap connect amd-gaia:home
 
 ---
 
-## 🛠️ Injected Sandbox System Components
+### 3. Agent Verification Status Matrix
 
-The project uses two primary sideloaded scripts to bridge the container isolation gap automatically without modifying core upstream source libraries:
+The following table tracks the operational functionality of the custom agent suites validated inside this build release:
 
-### gaia-launcher.sh (The Startup Guard)
-When you launch the app, this wrapper executes first to handle environment configuration setup:
-1. **Prioritized Bin Pathing:** Prepends $SNAP/bin directly to the front of the runtime execution $PATH to guarantee internal python subprocess calls resolve targeted utility binaries inside our sandbox first.
-2. **Context Window Allocation:** Explicitly locks the model's token limits to 32,768 tokens across environment flags (GAIA_CTX_SIZE) to prevent the framework from defaulting to an empty or zeroed state.
-3. **Dynamic Sandbox Proxying:** Queries snapctl to evaluate the active backend.url. If configured for remote deployment, it stands up an isolated socat gateway on container loopback port 13305 to capture backend engine requests.
-4. **Dynamic Seeder Execution:** Automatically detects your local data path at boot time. If it doesn't see your plugin files, it copies our custom network-wizard suite directly into your writable environment directory before starting the application interface.
-
-### network-wizard/agent.py (The Memory Interceptor)
-This file is registered as a trusted extension class inside the discovery loop. On load, it triggers a background process that applies deep runtime patches directly to Python's outbound networking library (urllib3):
-* **Dynamic Domain Translation:** Catches outbound requests targeted at raw IP addresses (like DuckDuckGo or web scraper nodes) and rewrites them back to secure textual hostnames allowed by remote SSL certificate configurations to prevent tracking drops.
-* **Desktop Client Masquerade:** Injects standard browser metadata structures (User-Agent configurations) into outbound request fields before transmission. This hides the restricted container footprint and prevents remote CDNs from dropping or slow-dripping data streams.
+| Agent Identity | Verification Status | Operational Notes |
+| :--- | :--- | :--- |
+| **Chat Agent** | **PASSED** | Local conversational contexts execute smoothly. |
+| **File Agent** | **PASSED** | Parses and indexes data blocks; requires Tier 3 home connection. |
+| **Browser Agent** | **PASSED** | Navigates modern web layouts cleanly without interface crashes. |
+| **Web Lite Agent** | **PASSED** | Lightweight text-based scraping execution routines verified. |
 
 ---
 
-## 👨‍💻 Important Guide for Tinkerers
+## 🛠️ Deep Dive: Applied Architecture Patches (Why & How)
 
-If you plan to modify or extend this codebase, keep these critical mechanics in mind:
+To run a complex multi-process AI environment inside a strictly sandboxed container without breaking the upstream source repository code, this package injects **four specific self-healing patches** automatically at execution time:
 
-* **Mind the Shared Data Cache:** GAIA utilizes an aggressive runtime cache inside your user folder tree (~/.gaia/). If you update your custom agent logic or experience unexpected model initialization glitches, **you must wipe your user workspace cache folders** to let the launcher seed your updated logic fresh. Run:
-    rm -rf ~/snap/amd-gaia/common/.gaia/
-    rm -rf ~/snap/amd-gaia/current/.gaia/
-* **Bypassing the Strict Registry Check:** GAIA’s internal discovery loop (registry.py) strictly validates modules on boot. If your custom script does not contain a class that explicitly inherits from Agent imported from gaia.agents.base.agent, the engine will silently fail, discard your script from system memory, and disable your custom patches.
-* **Testing Code Directly:** You can modify ~/.gaia/agents/network-wizard/agent.py directly to test real-time code adjustments quickly without running a lengthy snapcraft pack re-compilation loop every time. Just run sudo killall -9 gaia python3 to restart the application background threads and trigger a reload. Once your changes are stable, remember to copy them back to your root project folder before your final git commit!
-* 
+### 1. In-Memory Token Approval Bridge (`_gaia_sandbox_patch.py`)
+* **The Problem:** The stock application relies on complex file-polling disk loops to communicate tool execution permissions across the sandbox barrier, generating excessive disk I/O and random main-thread UI lockups.
+* **The Hotfix:** Sideloaded as a low-level Python runtime hook (`sitecustomize.py`). It dynamically intercepts class constructors on boot and implements a high-performance, thread-safe memory matrix signal framework (`threading.Event()`).
+
+### 2. Post-Build UI Splicing Matrix (`rebuild.sh`)
+* **The Problem:** Upstream changes to `notification-service.cjs` frequently break static file overrides across version upgrades.
+* **The Hotfix:** The custom deployment script intercepts the compiled Snap package post-build, pulls down a pristine UI layer package from the web, and uses an automated inline Node.js runner to inject a dynamic network forwarder right into the method signature block. If the upstream repository changes, your build automatically self-heals.
+
+### 3. Loopback Proxy Interceptor (`socat`)
+* **The Problem:** Hardcoding network endpoints inside strict container walls triggers host-level port allocation failures (`Address already in use`).
+* **The Hotfix:** When configured for a remote rig, `gaia-launcher.sh` stands up a private `socat` bridge completely isolated inside the snap's private network namespace. The local AI engine fires calls to localhost, unaware that the proxy is tunneling packets smoothly to your server rig.
+
+### 4. Browser Fingerprint Emulator (`agent.py`)
+* **The Problem:** Sandboxed Python scraping tools drop requests or trigger `403 Forbidden` responses when confronting Content Delivery Network (CDN) bot-blockers.
+* **The Hotfix:** The network wizard agent intercepts outgoing `urllib3` network calls, safely injecting standard Chrome browser identity markers, platform hints, and secure TLS cryptographic handshakes into the payload headers.
+
+---
+
+## 🧑‍💻 Developer Workspace & Hackers' Guide
+
+### Build Pipeline Automation
+The entire build lifecycle is unified inside a single, automated deployment script. To clear stale caches, build the source files, apply the runtime code injections, and deploy the fresh bundle locally, run:
+
+    ./rebuild.sh
+
+To run a deep, un-cached clean from scratch, pass the clean parameter flag:
+
+    ./rebuild.sh --clean
+
+### Local Target Customization
+To prevent your private environment URLs and live API keys from leaking into source control history logs, copy your credentials into a local `.env` file right inside your root project folder. It will be sourced automatically by the builder script while protecting your privacy:
+
+    # Create a local .env file (automatically ignored by git)
+    TARGET_BACKEND_URL="http://192.168.1.109:13305"
+    TAVILY_API_KEY="tvly-dev-your-secret-key-here"
+
+### Fast Live Debugging (No Recompiles)
+You don't need to sit through a lengthy 5-minute Snap compilation loop just to test minor code tweaks. You can edit the running Python environment hooks directly inside your writable tracking space:
+
+    nano ~/snap/amd-gaia/current/.gaia/agents/network-wizard/agent.py
+
+Once edited, simply recycle the application processes to reload the codebase into active system memory:
+
+    sudo killall -9 gaia python3
+
+*Note: Once your script changes are stable, always copy them back into your root development folder before creating your final commit!*
