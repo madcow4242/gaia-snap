@@ -6,7 +6,7 @@ This repository contains the UN-official production deployment blueprints for pa
 
 **Requirements:**
 
-- Lemonade Server - running locally on the same computer (default), or on a remote system (see config below).  This can be the snap version (`snap install lemonade-server`), the deb package (`sudo apt install lemonade-server`), from source, or other.
+- Lemonade Server or another OpenAI API-compatible back end like Ollama - running locally on the same computer (default), or on a remote system (see config below).  You can install (separately) the Lemonade Server snap version (`snap install lemonade-server`), the deb package (`sudo apt install lemonade-server`), from source, other - or use an external service.
 
 ---
 
@@ -19,6 +19,8 @@ By default, the Snap attempts to route all model inference traffic out to your l
 To point traffic to a local instance of Lemonade Server or Ollama running natively on your host machine's port 13305, set your target to loopback:
 
     sudo snap set amd-gaia backend.url="http://127.0.0.1:13305"
+
+If your backend uses a different port, that can be set using this method as well.
 
 #### Option B: Offloading to a Remote Inference Server Rig
 To offload heavy token processing and agent loops to a dedicated server cluster elsewhere on your local area network, change the target address:
@@ -37,14 +39,17 @@ To arm search agents with live web-scraping capabilities, seed your external API
 ### 2. Home Directory File Access Levels
 The Snap implements a strict **3-Tier Compliant Security Control Ledger** to govern how AI agents interact with your computer's storage space. This can be configured via standard Ubuntu system interface connections:
 
-* **Tier 1: Total Isolation (Default Setup)** Reading and writing to your local files is completely blocked. Agents function inside an empty, sterile environment memory footprint.
+* **Tier 1: Total Isolation (Default Setup)** Reading and writing to your local files is completely blocked. Agents function inside an empty, sterile environment memory footprint.  You can reset to this state if needed via:
+
+    `sudo snap disconnect amd-gaia:home`
+
 * **Tier 2: Read-Only System Protection** Grants kernel-enforced read-only exposure. Agents can ingest and parse documents but are locked from altering or deleting them. Enable via:
 
-    sudo snap connect amd-gaia:home-read-only
+    `sudo snap connect amd-gaia:home-read-only`
 
 * **Tier 3: Full Native Read-Write Privileges** Grants unrestricted read and write privileges inside standard user directories (`Documents`, `Downloads`, `Desktop`). Enable via:
 
-    sudo snap connect amd-gaia:home
+    `sudo snap connect amd-gaia:home`
 
 ---
 
@@ -52,12 +57,14 @@ The Snap implements a strict **3-Tier Compliant Security Control Ledger** to gov
 
 The following table tracks the operational functionality of the custom agent suites validated inside this build release:
 
-| Agent Identity | Verification Status | Operational Notes |
-| :--- | :--- | :--- |
-| **Chat Agent** | **PASSED** | Local conversational contexts execute smoothly. |
-| **File Agent** | **PASSED** | Parses and indexes data blocks; requires Tier 3 home connection. |
-| **Browser Agent** | **PASSED** | Navigates modern web layouts cleanly without interface crashes. |
-| **Web Lite Agent** | **PASSED** | Lightweight text-based scraping execution routines verified. |
+| Agent Identity     | Verification Status | Operational Notes                                                |
+|:-------------------|:--------------------|:-----------------------------------------------------------------|
+| **Chat Agent**     | **PASSED**          | Local conversational contexts execute smoothly.                  |
+| **File Agent**     | **PASSED**          | Parses and indexes data blocks; requires Tier 3 home connection. |
+| **Browser Agent**  | **PASSED**          | Navigates modern web layouts cleanly without interface crashes.  |
+| **Web Lite Agent** | **PASSED**          | Lightweight text-based scraping execution routines verified.     |
+
+Other agents have been lightly tested and appear to function as intended - but deep integrations have not yet been exercised.  If you find issues, please submit a bug or Pull Request.
 
 ---
 
