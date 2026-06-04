@@ -6,11 +6,11 @@ This repository contains the UN-official production deployment blueprints for pa
 
 **Requirements:**
 
-* **AI Processing Server:** Lemonade Server or another OpenAI API-compatible back end like Ollama—running locally on the same computer (default), or on a remote system (see config below). You can install (separately) the Lemonade Server snap version (`snap install lemonade-server`), the deb package (`sudo apt install lemonade-server`), build from source, or connect to an external hosted service.
+* **AI Processing Server:** Lemonade Server or another OpenAI API-compatible back end like Ollama running locally on the same computer (default), or on a remote system (see config below). You can install (separately) the Lemonade Server snap version (`snap install lemonade-server`), the deb package (`sudo apt install lemonade-server`), build from source, or connect to an external hosted service.
 
 **NOTES**
 
-Many of the "normal" agents use very large models by default, such as 35B models that consume large amounts of VRAM. This is fine on a system with 24–32GB of GPU memory, but will seriously bog down or crash systems with less hardware allocation.
+Many of the "normal" agents use very large models by default, such as 35B models that consume large amounts of VRAM. This is fine on a system with 24-32GB of GPU memory, but will seriously bog down or crash systems with less hardware allocation.
 
 If your system (or remote AI server) has less than 24GB of GPU memory, it is highly suggested that you use the "lite" agents instead, which default to a smaller model size. (16GB may be enough, but YMMV).
 
@@ -24,14 +24,14 @@ By default, the Snap attempts to route all model inference traffic out to your l
 #### Option A: Local Laptop Resources (Default)
 To point traffic to a local instance of Lemonade Server or Ollama running natively on your host machine's port 13305, set your target to loopback:
 
-<pre><code>sudo snap set amd-gaia backend.url="[http://127.0.0.1:13305](http://127.0.0.1:13305)"</code></pre>
+<pre><code>sudo snap set amd-gaia backend.url="http://127.0.0.1:13305"</code></pre>
 
 If your backend uses a different port, that can be set using this method as well.
 
 #### Option B: Offloading to a Remote Inference Server Rig
 To offload heavy token processing and agent loops to a dedicated server cluster elsewhere on your local area network, change the target address:
 
-<pre><code>sudo snap set amd-gaia backend.url="[http://192.168.1.109:13305](http://192.168.1.109:13305)"</code></pre>
+<pre><code>sudo snap set amd-gaia backend.url="http://192.168.1.109:13305"</code></pre>
 
 #### Option C: External Search Services (Beta / Untested)
 To arm search agents with live web-scraping capabilities, seed your external API provider credentials into the configuration registry:
@@ -67,7 +67,7 @@ The following table tracks the operational functionality of the custom agent sui
 | **Browser Agent** | **PASSED** | Navigates modern web layouts cleanly without interface crashes. |
 | **Web Lite Agent** | **PASSED** | Lightweight text-based scraping execution routines verified. |
 
-Other agents have been lightly tested and appear to function as intended—but deep system-level tool integrations have not yet been heavily exercised. If you find edge-case issues, please submit a bug report or a Pull Request.
+Other agents have been lightly tested and appear to function as intended but deep system-level tool integrations have not yet been heavily exercised. If you find edge-case issues, please submit a bug report or a Pull Request.
 
 ---
 
@@ -123,54 +123,30 @@ Create a file named exactly `.env` in the repository's root development director
 
 <pre><code># Master Local Build Flags (.env)
 GAIA_VERSION=0.20.0
-TARGET_BACKEND_URL=[http://192.168.1.109:13305](http://192.168.1.109:13305)
+TARGET_BACKEND_URL=http://192.168.1.109:13305
 TAVILY_API_KEY=tvly-your-custom-key-string</code></pre>
 
 ---
 
-## 🧙‍♂️ How to Inject a Custom AI Agent Suite
+## 🧙‍♂️ Zero-Rebuild Sideloading: Injecting Custom Agents
 
-If you have engineered a custom GAIA-compliant agent (e.g., a `.py` file implementing the core `Agent` abstract class structure), you can easily sideload it into this custom Snap environment. 
+The framework includes a custom bootstrap mapper that scans user-space directories on boot. This allows you to hotload completely new GAIA-compliant agents (implementing the core `Agent` class and `@register_agent` decorators) **instantly without rebuilding or re-compiling the Snap package**.
 
-To ensure the GAIA compiler registry successfully discovers, validates, and mounts your agent without throwing sandbox initialization faults, you must place the asset in the specific paths outlined below.
+### Step 1: Deploy the Python Asset (NO SUDO)
+Copy your valid agent `.py` file directly into your writable, user-owned configuration runtime storage namespace directory. 
 
-### Method A: Permanent Build-Time Integration (Recommended)
-To bake your custom agent directly into the production `.snap` package so that it deploys cleanly across clean installations, drop the files directly into your local build workspace directory before running the pipeline compiler.
+**CRITICAL:** Do *not* use `sudo`, or the file will be root-locked and trigger `[Errno 13] Permission Denied` execution faults.
+<pre><code>cp your_custom_agent.py ~/snap/amd-gaia/current/.gaia/sideloaded_agents/</code></pre>
 
-#### 1. Place the Source Asset
-Move your custom python script into the `network-wizard` companion folder inside your root project folder structure:
-<pre><code>cp your_custom_agent.py network-wizard/</code></pre>
-
-#### 2. Register the Module Payload
-Open `network-wizard/__init__.py` and add an explicit import statement at the bottom of the file to force the python compiler runtime engine to execute your class tracking decorators on boot:
-<pre><code># network-wizard/__init__.py
-from . import your_custom_agent</code></pre>
-
-#### 3. Compile the Deployment Bundle
-Fire off the master build script to automatically stage, compress, patch, and install the updated sandbox application globally:
-<pre><code>./rebuild.sh</code></pre>
-
----
-
-### Method B: Hot-Sideloading for Real-Time Debugging (No Recompiles)
-If you are rapidly modifying agent prompts, validation tools, or system parameters, you can bypass the lengthy 5-minute Snap compilation loop entirely by injecting the file straight into your user data tracking directory profile workspace.
-
-#### 1. Inject into the Writable Sandboxed Runtime Path
-Copy your script directly into the active, user-owned configuration runtime storage namespace directory mapping:
-<pre><code>cp your_custom_agent.py ~/snap/amd-gaia/current/.gaia/agents/network-wizard/</code></pre>
-
-#### 2. Force-Reload Active Memory Headers
-To make the background Python orchestration daemon evaluate the updated workspace registry layout, terminate any lingering active engine tasks across namespaces:
+### Step 2: Cycle Active Process Memory Loops
+To force the low-level bootstrap broker to execute path mappings and prompt the native GAIA engine to index your script, flush active memory spaces:
 <pre><code>sudo killall -9 gaia python3</code></pre>
-The GAIA desktop launcher environment will automatically cycle its process trees and reload with your fresh agent configurations active in memory.
 
-> ⚠️ **CRITICAL DEVELOPER GUARDRAIL:** Because everything inside the `~/snap/amd-gaia/current` namespace directory mapping is untracked by Git, **always copy your stabilized script assets back into your root development folder (`/network-wizard/`)** before executing your final repository commits!
+When GAIA cycles back open, the low-level bootstrap patch bridges your file into the application's discovery matrix, automatically registering it right inside your desktop chat interface selector menus!
 
 ---
 
-### 💡 Why this works under strict confinement
-During the `override-build` step of `gaia-sideloads` inside `snapcraft.yaml`, the builder mirrors the entire `/network-wizard` directory straight into the Snap's internal system discovery layer:
+### 💡 Architectural Safety (Why Sideloading is Secure Here)
+Because this application runs encapsulated inside a strictly confined container, any arbitrary Python code executed via sideloading is **completely mediated by the kernel**. 
 
-<pre><code>/usr/share/gaia-agents/network-wizard/</code></pre>
-
-When GAIA launches, our `_gaia_sandbox_patch.py` hook forces Python's system path manager (`sys.path`) to evaluate that exact folder. By organizing your new files alongside the `network-wizard` payload directory structure, you inherit all our pre-configured network overrides, browser fingerprint emulators, and containerized SSL certificate authorities completely for free!
+If a sideloaded script attempts to run unsafe host operations (e.g., `os.system("rm -rf /")` or dropping standard background log scrapers), kernel AppArmor profiles block the execution. The sideloaded layer can only see assets tucked safely inside its own isolated sandboxed tracking paths, turning the framework into a safe, modular ecosystem playground.

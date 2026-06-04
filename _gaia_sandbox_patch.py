@@ -8,9 +8,10 @@ import os
 import sys
 import time
 import threading
+import importlib.util
 from pathlib import Path
 
-# 🌟 INFRASTRUCTURE LOCK: Hard-override system variables to reject upstream update requests
+# 🔐 INFRASTRUCTURE LOCK: Hard-override system variables to reject upstream update requests
 os.environ["GAIA_AUTO_UPDATE"] = "false"
 os.environ["GAIA_CHECK_UPDATES"] = "false"
 os.environ["GAIA_DISABLE_UPDATE_CHECK"] = "true"
@@ -32,6 +33,39 @@ try:
     OrigConfirmExecution = sse_mod.SSEOutputHandler.confirm_tool_execution
     OrigResolveConfirmation = sse_mod.SSEOutputHandler.resolve_tool_confirmation
 
+    def hotload_user_agents():
+        """
+        Scans user-space configurations and bridges them straight into GAIA's
+        native discovery directories to force formal UI registration hooks.
+        """
+        # 📂 Secure user-space sources
+        base_dir = Path(os.environ.get("SNAP_USER_DATA", "~/snap/amd-gaia/current")) / ".gaia"
+        user_src_dir = base_dir / "sideloaded_agents"
+        user_src_dir.mkdir(parents=True, exist_ok=True)
+
+        # 🎯 Target native discovery directory
+        gaia_native_dir = base_dir / "agents"
+        gaia_native_dir.mkdir(parents=True, exist_ok=True)
+
+        for py_file in user_src_dir.glob("*.py"):
+            if py_file.name == "__init__.py":
+                continue
+
+            agent_name = py_file.stem
+            target_agent_folder = gaia_native_dir / agent_name
+            target_agent_folder.mkdir(parents=True, exist_ok=True)
+
+            # Formally mirror the agent script as the primary entry point
+            target_script = target_agent_folder / "agent.py"
+            if not target_script.exists():
+                try:
+                    # Establish a clean link boundary across the user space
+                    target_script.symlink_to(py_file)
+                    print(f"🛰️ Dynamic Hotload Matrix: Linked [{agent_name}] to GAIA registry workspace.", flush=True)
+                except Exception as link_err:
+                    # Fallback to a standard copy operation if symlink creation is constrained
+                    import shutil
+                    shutil.copystr(str(py_file), str(target_script))
 
     def patched_confirm_tool_execution(self, tool_name, tool_args, timeout=60):
         if self.background_mode:
@@ -120,7 +154,7 @@ except Exception as bootstrap_err:
     print(f"⚠️ Sandbox Bootstrap Hook initialization deferred: {str(bootstrap_err)}", flush=True)
 
 # =====================================================================
-# 🌟 DYNAMIC APPLICATION UPDATE SILENCER MATRIX
+# 🛰️ DYNAMIC APPLICATION UPDATE SILENCER MATRIX
 # =====================================================================
 try:
     # Hunt the core configuration manager inside active system memory namespaces
@@ -145,5 +179,13 @@ try:
         print("🛰️ Deep Sandbox Security: Native engine auto-updates successfully suppressed.", flush=True)
 
 except Exception as update_patch_err:
-    # If the app structure uses an early beta config class layout, fail silently without halting boot routines
     print(f"🛰️ Update suppression hook deferred cleanly: {str(update_patch_err)}", flush=True)
+
+# =====================================================================
+# 🌟 EXECUTION GATEWAY: Fire hotloader at the absolute baseline
+# =====================================================================
+try:
+    if 'hotload_user_agents' in locals():
+        hotload_user_agents()
+except Exception as gateway_err:
+    print(f"⚠️ Hotload runner halted by execution gateway: {str(gateway_err)}", flush=True)
