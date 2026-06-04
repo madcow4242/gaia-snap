@@ -2,11 +2,11 @@
 
 **GAIA Version Compliance:** Dynamic Environment Variable Injected
 
-This repository contains the official production deployment blueprints for packaging **GAIA** as a secure, strictly confined Snap. 
+This repository contains the UN-official production deployment blueprints for packaging AMD's [**GAIA**](https://github.com/amd/gaia) as a secure, strictly confined Snap. 
 
 **Requirements:**
 
-- Lemonade Server - running locally on the same computer (default), or on a remote system (see config below).  This can be the snap version (snap install lemonade-server), the deb package (sudo apt install lemonade-server), from source, or other.
+- Lemonade Server - running locally on the same computer (default), or on a remote system (see config below).  This can be the snap version (`snap install lemonade-server`), the deb package (`sudo apt install lemonade-server`), from source, or other.
 
 ---
 
