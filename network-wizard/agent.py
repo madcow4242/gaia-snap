@@ -74,18 +74,18 @@ def transform_connection_targets(host, port=None):
                 remote_host, remote_port = get_dynamic_target()
                 if remote_host and remote_port:
                     logger.info(
-                        f"🚀 Network Wizard Interceptor: Redirecting local model request: {host_str}:{port} -> http://{remote_host}:{remote_port}")
+                        f"🛰️ Network Wizard Interceptor: Redirecting local model request: {host_str}:{port} -> http://{remote_host}:{remote_port}")
                     return remote_host, remote_port
             return host, port
 
-        # 🛡️ RULE 2: NETWORK TRANSIT SECURITY PASS
+        # 🔒 RULE 2: NETWORK TRANSIT SECURITY PASS
         if port is not None and port != 80 and port != 443:
             return host, port
 
         if "." not in host_str:
             return host, port
 
-        # 🧭 --- ALL SSL / SNI REPAIR RULES EXECUTED STRICTLY FOR EXTERNAL WEB BELOW ---
+        # 🛰️ --- ALL SSL / SNI REPAIR RULES EXECUTED STRICTLY FOR EXTERNAL WEB BELOW ---
         try:
             frame = sys._getframe(2)
             while frame:
@@ -99,7 +99,7 @@ def transform_connection_targets(host, port=None):
                             if not re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', extracted_domain):
                                 if host_str != extracted_domain:
                                     logger.info(
-                                        f"🧭 Network Wizard Interceptor: Recovered SNI host domain from call frame: [{host_str}] -> [{extracted_domain}]")
+                                        f"🛰️ Network Wizard Interceptor: Recovered SNI host domain from call frame: [{host_str}] -> [{extracted_domain}]")
                                     return extracted_domain, port
                 frame = frame.f_back
         except Exception as frame_err:
@@ -108,7 +108,7 @@ def transform_connection_targets(host, port=None):
         if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', host_str):
             if host_str == "52.149.246.39":
                 logger.info(
-                    f"🎯 Network Wizard Interceptor: Mapping Search Engine Target [{host_str}] -> duckduckgo.com")
+                    f"🛰️ Network Wizard Interceptor: Mapping Search Engine Target [{host_str}] -> duckduckgo.com")
                 return "duckduckgo.com", port
 
             return host, port
@@ -167,7 +167,7 @@ try:
 
     urllib3.connection.HTTPConnection.__init__ = patched_http_init
     urllib3.connection.HTTPSConnection.__init__ = patched_https_init
-    logger.info("📡 Universal Subnet-Aware FQDN and Local Offload translation matrix active.")
+    logger.info("🛰️ Universal Subnet-Aware FQDN and Local Offload translation matrix active.")
 except Exception as e:
     logger.error(f"❌ Universal FQDN connection patching failed: {str(e)}")
 
@@ -188,7 +188,7 @@ try:
 
 
     ssl.create_default_context = patched_create_default_context
-    logger.info("🔒 Foundational browser-aligned TLS handshake matrix active.")
+    logger.info("🛰️ Foundational browser-aligned TLS handshake matrix active.")
 except Exception as tls_err:
     logger.error(f"❌ Foundational TLS cryptographic patching failed: {str(tls_err)}")
 
@@ -204,9 +204,8 @@ try:
 
     os.environ["CURL_CA_BUNDLE"] = snap_ssl_file
     os.environ["REQUESTS_CA_BUNDLE"] = snap_ssl_file
-    logger.info(f"🔑 Secure Sandbox SSL: Anchored to certificate engine target: {snap_ssl_file}")
+    logger.info(f"🛰️ Secure Sandbox SSL: Anchored to certificate engine target: {snap_ssl_file}")
 except Exception as e:
-    logger.environ["REQUESTS_CA_BUNDLE"] = snap_ssl_file
     logger.error(f"❌ Sandbox proxy environmental tuning failed: {str(e)}")
 
 
@@ -215,16 +214,34 @@ class NetworkWizardAgent(Agent):
     AGENT_ID = "network-wizard"
     AGENT_NAME = "Network Wizard"
 
-    def __init__(self, config: AgentConfig):
+    def __init__(self, *args, **kwargs):
         if Agent is not object:
+            config = args[0] if args else kwargs.get("config", None)
             super().__init__(config)
-        logger.info("🚀 Network Wizard Agent successfully mounted into workspace registry.")
+        logger.info("🛰️ Network Wizard Agent successfully mounted into workspace registry.")
 
-    async def _process_query_impl(self, query: str, context=None):
-        yield "📡 **Network Wizard Engine Engaged**\n\n"
+    def _register_tools(self):
+        """Satisfies GAIA requirements for tool discovery loops."""
+        return []
+
+    # 🌟 CORRECTION: Removed 'async' and 'yield' operators. Returns a plain, production-ready String.
+    def _process_query_impl(self, *args, **kwargs):
         remote_host, remote_port = get_dynamic_target()
+
         if remote_host:
-            yield f"🌐 **Hardware Offload Mode:** Active. Intercepting local calls and routing to `{remote_host}:{remote_port}`\n\n"
+            status_block = f"🟢 **Hardware Offload Proxy:** Active.\n* All outbound inference queries to `localhost:13305` are automatically captured and routed across the host network interface directly to your high-performance remote backend cluster coordinates at `{remote_host}:{remote_port}`."
         else:
-            yield "💻 **Local Mode:** Active. Running operations completely locally.\n\n"
-        yield "✅ Operational parameters are synchronized perfectly."
+            status_block = "🔵 **Local Sandbox Loopback:** Active.\n* All agent operations are running locally using standard host machine loopback allocations."
+
+        response_text = (
+            "🧙‍♂️ **Network Wizard System Status Internal Ledger**\n\n"
+            "This specialized system agent functions as an automated low-level intercept layer "
+            "designed to patch GAIA's core networking pipelines. Its primary role is to bridge connection gaps, "
+            "emulate desktop fingerprints, and route traffic across strict Snap containerization boundaries.\n\n"
+            "**Note:** This agent cannot execute standard multi-turn conversational tasks or general user commands.\n\n"
+            "--- \n\n"
+            f"{status_block}\n\n"
+            "🔒 **Container Networking Status:** Operational and synchronized perfectly."
+        )
+
+        return response_text

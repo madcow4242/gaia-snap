@@ -13,6 +13,25 @@ fi
 FINAL_BACKEND_URL="${TARGET_BACKEND_URL:-http://127.0.0.1:13305}"
 FINAL_TAVILY_KEY="${TAVILY_API_KEY:-}"
 
+# Fallback baseline version number if GAIA_VERSION isn't explicitly defined in .env
+export GAIA_VERSION="${GAIA_VERSION:-0.20.0}"
+
+# 🌟 AUTOMATED CLEAN RESTORE CLEANUP TRAP: Guarantees your master file rolls back safely even on early exit errors
+cleanup_yaml_token() {
+    echo "🧼 Restoring snapcraft.yaml placeholder matrices..."
+    sed -i "s/releases\/download\/v${GAIA_VERSION}/releases\/download\/v@GAIA_VERSION@/g" snap/snapcraft.yaml || true
+    sed -i "s/gaia-agent-ui-${GAIA_VERSION}-amd64.deb/gaia-agent-ui-@GAIA_VERSION@-amd64.deb/g" snap/snapcraft.yaml || true
+    sed -i "s/source-tag: v${GAIA_VERSION}/source-tag: v@GAIA_VERSION@/g" snap/snapcraft.yaml || true
+    sed -i "s/set version=\"${GAIA_VERSION}\"/set version=\"@GAIA_VERSION@\"/g" snap/snapcraft.yaml || true
+}
+trap cleanup_yaml_token EXIT
+
+echo "📝 Injecting dynamic target build version parameter context: v${GAIA_VERSION}"
+sed -i "s/releases\/download\/v@GAIA_VERSION@/releases\/download\/v${GAIA_VERSION}/g" snap/snapcraft.yaml
+sed -i "s/gaia-agent-ui-@GAIA_VERSION@-amd64.deb/gaia-agent-ui-${GAIA_VERSION}-amd64.deb/g" snap/snapcraft.yaml
+sed -i "s/source-tag: v@GAIA_VERSION@/source-tag: v${GAIA_VERSION}/g" snap/snapcraft.yaml
+sed -i "s/set version=\"@GAIA_VERSION@\"/set version=\"${GAIA_VERSION}\"/g" snap/snapcraft.yaml
+
 echo "🔍 Validating administrative credentials..."
 if ! sudo -n true 2>/dev/null; then
     echo "🔑 Sudo authorization required. Please enter your password below:"
@@ -61,8 +80,8 @@ SNAP_FILE=$(ls -t *.snap | head -n 1)
 WORK_DIR=$(mktemp -d)
 echo "📂 Created temporary workspace container: $WORK_DIR"
 
-DEB_URL="https://github.com/amd/gaia/releases/download/v0.20.0/gaia-agent-ui-0.20.0-amd64.deb"
-echo "🌐 Downloading pristine v0.20.0 UI layer mapping matrix..."
+DEB_URL="https://github.com/amd/gaia/releases/download/v${GAIA_VERSION}/gaia-agent-ui-${GAIA_VERSION}-amd64.deb"
+echo "🌐 Downloading pristine v${GAIA_VERSION} UI layer mapping matrix..."
 curl -L -s -o "$WORK_DIR/gaia-ui.deb" "$DEB_URL"
 
 echo "📦 Extracting pristine app.asar from download package..."

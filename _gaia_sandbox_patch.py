@@ -10,6 +10,11 @@ import time
 import threading
 from pathlib import Path
 
+# 🌟 INFRASTRUCTURE LOCK: Hard-override system variables to reject upstream update requests
+os.environ["GAIA_AUTO_UPDATE"] = "false"
+os.environ["GAIA_CHECK_UPDATES"] = "false"
+os.environ["GAIA_DISABLE_UPDATE_CHECK"] = "true"
+
 PENDING_TICKETS = {}
 TICKET_LOCK = threading.Lock()
 
@@ -61,7 +66,7 @@ try:
             "timeout_seconds": timeout,
         })
 
-        print(f"🚀 Sandbox API Matrix: Monitoring memory register for token: [{confirm_id}]", flush=True)
+        print(f"🛰️ Sandbox API Matrix: Monitoring memory register for token: [{confirm_id}]", flush=True)
 
         success = event_signal.wait(timeout=timeout)
 
@@ -69,7 +74,7 @@ try:
             ticket_data = PENDING_TICKETS.pop(confirm_id, None)
 
         if success and ticket_data:
-            print(f"✨ Sandbox API Matrix matched memory signal! continuing task -> [{ticket_data['status']}]",
+            print(f"🛰️ Sandbox API Matrix matched memory signal! continuing task -> [{ticket_data['status']}]",
                   flush=True)
             return ticket_data["status"] == "approved"
 
@@ -77,16 +82,16 @@ try:
 
 
     sse_mod.SSEOutputHandler.confirm_tool_execution = patched_confirm_tool_execution
-    print("✨ Global Sandbox Concurrency Bootstrap Hooks Refactored to Memory Store.", flush=True)
+    print("🛰️ Global Sandbox Concurrency Bootstrap Hooks Refactored to Memory Store.", flush=True)
 
 
-    # 🌟 CUSTOM ROUTE INJECTOR
+    # 🛰️ CUSTOM ROUTE INJECTOR
     def inject_custom_api_route(app: FastAPI):
         custom_router = APIRouter(prefix="/api/sandbox")
 
         @custom_router.post("/resolve")
         async def resolve_sandbox_ticket(payload: ElectronPayload):
-            print(f"✨ Custom API Route intercepted click event: {payload.confirm_id} -> approved={payload.approved}",
+            print(f"🛰️ Custom API Route intercepted click event: {payload.confirm_id} -> approved={payload.approved}",
                   flush=True)
             with TICKET_LOCK:
                 if payload.confirm_id in PENDING_TICKETS:
@@ -96,7 +101,7 @@ try:
             return {"status": "error", "message": "Token transaction missing or expired"}
 
         app.include_router(custom_router)
-        print("⚡ Custom Writable Sandbox API Route forcefully appended to FastAPI ledger matrix.", flush=True)
+        print("🛰️ Custom Writable Sandbox API Route forcefully appended to FastAPI ledger matrix.", flush=True)
 
 
     import fastapi.applications
@@ -112,4 +117,33 @@ try:
     fastapi.applications.FastAPI.__init__ = patched_fastapi_init
 
 except Exception as bootstrap_err:
-    print(f"❌ Sandbox Bootstrap Hook initialization deferred: {str(bootstrap_err)}", flush=True)
+    print(f"⚠️ Sandbox Bootstrap Hook initialization deferred: {str(bootstrap_err)}", flush=True)
+
+# =====================================================================
+# 🌟 DYNAMIC APPLICATION UPDATE SILENCER MATRIX
+# =====================================================================
+try:
+    # Hunt the core configuration manager inside active system memory namespaces
+    config_mod = sys.modules.get('gaia.config') or sys.modules.get('gaia.core.config')
+    if not config_mod:
+        import gaia.config as config_mod
+
+    if hasattr(config_mod, 'get_config'):
+        orig_get_config = config_mod.get_config
+
+
+        def patched_get_config(*args, **kwargs):
+            cfg = orig_get_config(*args, **kwargs)
+            # Force-strip update parameters entirely from the application profile layout
+            if hasattr(cfg, 'auto_update'): cfg.auto_update = False
+            if hasattr(cfg, 'check_for_updates'): cfg.check_for_updates = False
+            if hasattr(cfg, 'update_notifications'): cfg.update_notifications = False
+            return cfg
+
+
+        config_mod.get_config = patched_get_config
+        print("🛰️ Deep Sandbox Security: Native engine auto-updates successfully suppressed.", flush=True)
+
+except Exception as update_patch_err:
+    # If the app structure uses an early beta config class layout, fail silently without halting boot routines
+    print(f"🛰️ Update suppression hook deferred cleanly: {str(update_patch_err)}", flush=True)

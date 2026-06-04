@@ -1,6 +1,6 @@
 # GAIA Desktop Framework Engine (Snap Build Environment)
 
-**GAIA Version Compliance:** v0.20.0 (Strictly Confined Base Core24 Package)
+**GAIA Version Compliance:** Dynamic Environment Variable Injected
 
 This repository contains the official production deployment blueprints for packaging **GAIA** as a secure, strictly confined Snap. 
 
@@ -91,19 +91,4 @@ To run a deep, un-cached clean from scratch, pass the clean parameter flag:
     ./rebuild.sh --clean
 
 ### Local Target Customization
-To prevent your private environment URLs and live API keys from leaking into source control history logs, copy your credentials into a local `.env` file right inside your root project folder. It will be sourced automatically by the builder script while protecting your privacy:
-
-    # Create a local .env file (automatically ignored by git)
-    TARGET_BACKEND_URL="http://192.168.1.109:13305"
-    TAVILY_API_KEY="tvly-dev-your-secret-key-here"
-
-### Fast Live Debugging (No Recompiles)
-You don't need to sit through a lengthy 5-minute Snap compilation loop just to test minor code tweaks. You can edit the running Python environment hooks directly inside your writable tracking space:
-
-    nano ~/snap/amd-gaia/current/.gaia/agents/network-wizard/agent.py
-
-Once edited, simply recycle the application processes to reload the codebase into active system memory:
-
-    sudo killall -9 gaia python3
-
-*Note: Once your script changes are stable, always copy them back into your root development folder before creating your final commit!*
+To prevent your private environment URLs, live API keys, and target build

@@ -9,13 +9,15 @@
 
 name: amd-gaia
 title: AMD GAIA Desktop Environment
-version: '0.20.0'
 summary: GAIA local AI agent framework with hardware acceleration.
 description: |
   GAIA is an advanced local AI worker orchestration desktop environment.
   This package features fully integrated networking infrastructure patches,
   bypasses container isolation limits, and natively embeds the custom
   Network Wizard agent framework suite out of the box.
+
+# 🌟 Metadata version is dynamically set by the craftctl hook inside Part 3
+adopt-info: gaia-sideloads
 
 license: MIT
 contact:
@@ -81,6 +83,7 @@ lint:
         - lib/python3.12/site-packages/nvidia/nvshmem/lib/nvshmem_transport_ucx.so.3
         - lib/python3.12/site-packages/torch/lib/libtorch_cuda_linalg.so
         - lib/python3.12/site-packages/torch/lib/libtorch_global_deps.so
+        - lib/python3.12/site-packages/nvidia/cu13/lib/libnvtx3interop.so.1
 
 apps:
   amd-gaia:
@@ -99,9 +102,9 @@ apps:
       - home
       - home-read-only
     environment:
-      HOME: "$SNAP_USER_DATA"               # 🌟 TARGET FIXED: Overrides os.homedir() to allow writable sandbox configurations
-      ELECTRON_DISABLE_SANDBOX: "1"         # ℹ️ Disables inner chromium sandbox blocks
-      ELECTRON_OZONE_PLATFORM_HINT: auto    # ℹ️ Optimizes platform layer rendering paths
+      HOME: "$SNAP_USER_DATA"               # 📝 TARGET FIXED: Overrides os.homedir() to allow writable sandbox configurations
+      ELECTRON_DISABLE_SANDBOX: "1"         # 🔐 Disables inner chromium sandbox blocks
+      ELECTRON_OZONE_PLATFORM_HINT: auto    # 🏎️ Optimizes platform layer rendering paths
 
 plugs:
   home-read-only:
@@ -120,7 +123,8 @@ parts:
     plugin: dump
     after:
       - gaia-sideloads
-    source: https://github.com/amd/gaia/releases/download/v0.20.0/gaia-agent-ui-0.20.0-amd64.deb
+    # 🌟 TARGET ANCHOR: The builder replaces this placeholder parameter inline before launching compilation loops
+    source: https://github.com/amd/gaia/releases/download/v@GAIA_VERSION@/gaia-agent-ui-@GAIA_VERSION@-amd64.deb
     source-type: deb
     stage-packages:
       - libdrm2
@@ -153,7 +157,8 @@ parts:
     after:
       - gaia-sideloads
     source: https://github.com/amd/gaia.git
-    source-tag: v0.20.0
+    # 🌟 TARGET ANCHOR: The builder replaces this placeholder parameter inline before launching compilation loops
+    source-tag: v@GAIA_VERSION@
     override-pull: |
       craftctl default
       echo "-e .[ui]" > "${CRAFT_PART_SRC}/requirements-extras.txt"
@@ -178,6 +183,9 @@ parts:
       - usr/share/libdrm/
     override-build: |
       mkdir -p "${CRAFT_PART_INSTALL}/bin"
+
+      # 🌟 TARGET ANCHOR: The builder replaces this placeholder parameter inline before launching compilation loops
+      craftctl set version="@GAIA_VERSION@"
 
       # 2. Manually deploy our launcher and low-level sandbox bootstrap patch scripts
       cp -av "${CRAFT_PART_SRC}/gaia-launcher.sh" "${CRAFT_PART_INSTALL}/bin/gaia-launcher.sh"
