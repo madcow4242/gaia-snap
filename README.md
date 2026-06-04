@@ -6,7 +6,7 @@ This repository contains the official production deployment blueprints for packa
 
 **Requirements:**
 
-- Lemonade Server - running locally on the same computer (default), or on a remote system (see config below).
+- Lemonade Server - running locally on the same computer (default), or on a remote system (see config below).  This can be the snap version (snap install lemonade-server), the deb package (sudo apt install lemonade-server), from source, or other.
 
 ---
 
