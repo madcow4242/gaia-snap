@@ -90,9 +90,21 @@ To run a complex multi-process AI environment inside a strictly sandboxed contai
 * **The Problem:** Upstream GAIA code contains hardcoded configuration profiles designed to communicate exclusively with an inference backend bound to `localhost:13305`. This prevents users from pointing the application to an alternative port or offloading token processing loops to a high-performance external server rig.
 * **The Hotfix:** When a custom remote server or custom loopback port is defined in the local configuration ledger, `gaia-launcher.sh` automatically spins up a private, low-overhead `socat` proxy bridge isolated entirely inside the Snap's private network namespace. The local AI application continues firing standard calls to `localhost:13305`, unaware that the underlying proxy layer is tunneling packets to your custom server coordinates.
 
-### 4. Browser Fingerprint Emulator (`agent.py`)
-* **The Problem:** Sandboxed Python scraping tools drop requests or trigger `403 Forbidden` responses when confronting Content Delivery Network (CDN) bot-blockers.
-* **The Hotfix:** The network wizard agent intercepts outgoing `urllib3` network calls, safely injecting standard Chrome browser identity markers, platform hints, and secure TLS cryptographic handshakes into the payload headers.
+### 4. Direct IP-to-Host SNI Recovery Engine (`agent.py`)
+* **The Problem:** When secondary agents attempt to connect to external web resources, the underlying Python tracking frame frequently passes raw destination IP addresses instead of qualified domain names. This causes secure HTTPS handshakes to fail immediately because the remote web server cannot map the Server Name Indication (SNI) back to a valid SSL certificate.
+* **The Hotfix:** Implemented an active execution-frame tracer (`sys._getframe`) inside the `transform_connection_targets` loop. The engine dynamically climbs the active call stack when an outbound socket opens, extracts the string attributes (`url`, `endpoint`, `uri`) from local parent frames, parses the true target domain string via regex, and restores the correct domain context right before the socket binds.
+
+### 5. Automated Browser Fingerprint Emulator (`agent.py`)
+* **The Problem:** Sandboxed scraping utilities firing raw HTTP requests trigger immediate `403 Forbidden` drop blocks from Content Delivery Networks (CDNs) like Cloudflare, which easily identify the signature footprint of automated sandboxed scripts.
+* **The Hotfix:** Monkeypatched `urllib3.connection.HTTPConnection.__init__` and `HTTPSConnection.__init__` globally. Every outbound connection automatically intercepts its own request payload headers on the fly, injecting realistic Google Chrome identities, platform hints (`Sec-Ch-Ua`), fallback browser parameters, and human-like request headers to blend into standard consumer traffic profiles.
+
+### 6. Foundational TLS Cryptographic Aligner (`agent.py`)
+* **The Problem:** The default Python SSL sockets inside a bare Core24 runtime container negotiate connections using a minimal, restrictive cipher suite. This triggers cryptographic handshakes failures or timeout drops when confronting modern optimized web targets.
+* **The Hotfix:** Hijacked the native `ssl.create_default_context` instance routine. The modified method injects a curated collection of modern, high-security ciphers (including `CHACHA20-POLY1305` and `AES-GCM` suites) and explicitly disables insecure legacy protocols (`SSLv3`, `TLSv1.0`, `TLSv1.1`), ensuring flawless compatibility with edge infrastructure.
+
+### 7. Containerized CA Certificate Authority Anchor (`agent.py`)
+* **The Problem:** Strictly confined applications are completely cut off from the host operating system's global trust stores located at `/etc/ssl/certs`. Lacking verified certification lists, all outgoing Python API calls to external services instantly fail with untrusted root authority exceptions.
+* **The Hotfix:** The initialization loop detects the sandboxed root namespace (`$SNAP`) and manually anchors the runtime global bundle variables (`CURL_CA_BUNDLE` and `REQUESTS_CA_BUNDLE`) straight to the read-only certificate engine mapping matrix located at `/snap/amd-gaia/current/etc/ssl/certs/ca-certificates.crt`. This restores absolute chain-of-trust verification inside the sandbox.
 
 ---
 
