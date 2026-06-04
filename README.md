@@ -8,6 +8,12 @@ This repository contains the UN-official production deployment blueprints for pa
 
 - Lemonade Server or another OpenAI API-compatible back end like Ollama - running locally on the same computer (default), or on a remote system (see config below).  You can install (separately) the Lemonade Server snap version (`snap install lemonade-server`), the deb package (`sudo apt install lemonade-server`), from source, other - or use an external service.
 
+**NOTES**
+
+Many of the "normal" agents use very large models by default, such as 35B models that consume large amounts of VRAM.  This is fine on a system with 24-32GB of GPU memory, but will seriously bog down or crash systems with less.
+
+If your system (or remote AI server) has less than 24GB of GPU memory, it is highly suggested that you use the "lite" agents instead, which default to a smaller model size.  (16GB may be enough, but YMMV)
+
 ---
 
 ## 🚀 User Configuration & Setup Guide
