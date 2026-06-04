@@ -78,17 +78,17 @@ Other agents have been lightly tested and appear to function as intended - but d
 
 To run a complex multi-process AI environment inside a strictly sandboxed container without breaking the upstream source repository code, this package injects **four specific self-healing patches** automatically at execution time:
 
-### 1. In-Memory Token Approval Bridge (`_gaia_sandbox_patch.py`)
-* **The Problem:** The stock application relies on complex file-polling disk loops to communicate tool execution permissions across the sandbox barrier, generating excessive disk I/O and random main-thread UI lockups.
-* **The Hotfix:** Sideloaded as a low-level Python runtime hook (`sitecustomize.py`). It dynamically intercepts class constructors on boot and implements a high-performance, thread-safe memory matrix signal framework (`threading.Event()`).
+### 1. D-Bus Mediation & Permission Matrix (`_gaia_sandbox_patch.py`)
+* **The Problem:** The stock application relies on native Linux desktop D-Bus signaling pathways to broadcast tool execution authorization requests from the background engine to the user interface. Under strict Snap confinement, arbitrary unmediated D-Bus communication is explicitly blocked by the kernel AppArmor security subsystem, causing tool execution loops to hang indefinitely.
+* **The Hotfix:** Sideloaded as an early-stage Python runtime hook via `sitecustomize.py`. It dynamically overrides the platform class constructors on boot, establishing an inline FastAPI-based endpoint matrix alongside a thread-safe memory signaling loop (`threading.Event()`). This completely routes tool permission handshakes away from system IPC buses and into a sandboxed, memory-confined network loop.
 
-### 2. Post-Build UI Splicing Matrix (`rebuild.sh`)
-* **The Problem:** Upstream changes to `notification-service.cjs` frequently break static file overrides across version upgrades.
-* **The Hotfix:** The custom deployment script intercepts the compiled Snap package post-build, pulls down a pristine UI layer package from the web, and uses an automated inline Node.js runner to inject a dynamic network forwarder right into the method signature block. If the upstream repository changes, your build automatically self-heals.
+### 2. Embedded ASAR Splicing & Repackaging Matrix (`rebuild.sh`)
+* **The Problem:** To hook the user interface side of the custom FastAPI permission engine created in Item 1, specific code injections must be introduced directly into `notification-service.cjs`. However, this file is sealed within a compiled Electron `app.asar` archive distributed inside the pristine application payload, making static file overrides fragile across version upgrades.
+* **The Hotfix:** The custom deployment script intercepts the compiled Snap package post-build, dynamically pulls down the pristine upstream UI layer, and utilizes `npx asar` to completely extract the source tree. An inline Node.js script surgically injects our custom HTTP approval bridge directly into the target function signature block, repacks the ASAR archive, and splices it cleanly back into the final Snap container payload.
 
-### 3. Loopback Proxy Interceptor (`socat`)
-* **The Problem:** Hardcoding network endpoints inside strict container walls triggers host-level port allocation failures (`Address already in use`).
-* **The Hotfix:** When configured for a remote rig, `gaia-launcher.sh` stands up a private `socat` bridge completely isolated inside the snap's private network namespace. The local AI engine fires calls to localhost, unaware that the proxy is tunneling packets smoothly to your server rig.
+### 3. Hardcoded Endpoint Translation Matrix (`socat`)
+* **The Problem:** Upstream GAIA code contains hardcoded configuration profiles designed to communicate exclusively with an inference backend bound to `localhost:13305`. This prevents users from pointing the application to an alternative port or offloading token processing loops to a high-performance external server rig.
+* **The Hotfix:** When a custom remote server or custom loopback port is defined in the local configuration ledger, `gaia-launcher.sh` automatically spins up a private, low-overhead `socat` proxy bridge isolated entirely inside the Snap's private network namespace. The local AI application continues firing standard calls to `localhost:13305`, unaware that the underlying proxy layer is tunneling packets to your custom server coordinates.
 
 ### 4. Browser Fingerprint Emulator (`agent.py`)
 * **The Problem:** Sandboxed Python scraping tools drop requests or trigger `403 Forbidden` responses when confronting Content Delivery Network (CDN) bot-blockers.
