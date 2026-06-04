@@ -1,5 +1,5 @@
 # =====================================================================
-# 🚨 AI DEVELOPER GUARDRAIL: REGRESSION PREVENTION DIRECTIVE
+# 🛡️ AI DEVELOPER GUARDRAIL: REGRESSION PREVENTION DIRECTIVE
 # - CRITICAL: When updating this code, perform a strict regression audit.
 # - COMPARE against the prior iteration line-by-line before suggesting edits.
 # - DO NOT drop or modify ANY build plugs, container layout parameters,
@@ -9,7 +9,7 @@
 
 name: amd-gaia
 title: AMD GAIA Desktop Environment
-version: '0.19.0'
+version: '0.20.0'
 summary: GAIA local AI agent framework with hardware acceleration.
 description: |
   GAIA is an advanced local AI worker orchestration desktop environment.
@@ -31,7 +31,7 @@ grade: stable
 confinement: strict
 base: core24
 
-icon: usr/share/pixmaps/amd-gaia.png
+icon: snap/gui/amd-gaia.png
 
 # SILENCE FALSE POSITIVES: Suppress all identified dynamic machine learning libraries
 lint:
@@ -59,9 +59,9 @@ lint:
         - lib/python3.12/site-packages/nvidia/cu13/lib/libnvrtc-builtins.alt.so.13.0
         - lib/python3.12/site-packages/nvidia/cu13/lib/libnvrtc-builtins.so.13.0
         - lib/python3.12/site-packages/nvidia/cu13/lib/libnvrtc.alt.so.13
-        - lib/python3.12/site-packages/nvidia/cu13/lib/libnvtx3interop.so.1
         - lib/python3.12/site-packages/nvidia/cu13/lib/libpcsamplingutil.so
         - lib/python3.12/site-packages/nvidia/cu13/lib/libcusolver.so.12
+        - lib/python3.12/site-packages/nvidia/libnvtx3interop.so.1
         - lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_adv.so.9
         - lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_cnn.so.9
         - lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_engines_precompiled.so.9
@@ -90,13 +90,29 @@ apps:
     plugs:
       - network
       - network-bind
-      - home
       - x11
       - desktop
       - desktop-legacy
       - opengl
       - gsettings
       - browser-support
+      - home
+      - home-read-only
+    environment:
+      HOME: "$SNAP_USER_DATA"               # 🌟 TARGET FIXED: Overrides os.homedir() to allow writable sandbox configurations
+      ELECTRON_DISABLE_SANDBOX: "1"         # ℹ️ Disables inner chromium sandbox blocks
+      ELECTRON_OZONE_PLATFORM_HINT: auto    # ℹ️ Optimizes platform layer rendering paths
+
+plugs:
+  home-read-only:
+    interface: personal-files
+    read:
+      - $HOME/Documents
+      - $HOME/Downloads
+      - $HOME/Desktop
+      - $HOME/Projects
+      - $HOME/Development
+      - $HOME/.gitconfig
 
 parts:
   # PART 1: UI Desktop Archive Extraction
@@ -104,14 +120,14 @@ parts:
     plugin: dump
     after:
       - gaia-sideloads
-    source: https://github.com/amd/gaia/releases/download/v0.19.0/gaia-agent-ui-0.19.0-amd64.deb
+    source: https://github.com/amd/gaia/releases/download/v0.20.0/gaia-agent-ui-0.20.0-amd64.deb
     source-type: deb
     stage-packages:
       - libdrm2
       - libgl1-mesa-dri
       - libglx-mesa0
       - libproxy1v5
-      - chromium-browser  # FIXED: Bundling standard sandbox browser components for backend tools
+      - chromium-browser
       - chromium-codecs-ffmpeg-extra
     override-build: |
       craftctl default
@@ -120,7 +136,7 @@ parts:
       if [ -n "$TARGET_ICON" ]; then
          ln -sf "$TARGET_ICON" "${CRAFT_PART_INSTALL}/usr/share/pixmaps/amd-gaia.png"
       fi
-      
+       
       mkdir -p "${CRAFT_PART_INSTALL}/usr/share/applications"
       TARGET_DESKTOP=$(find "${CRAFT_PART_INSTALL}/usr/share" -type f -name "*.desktop" | head -n 1)
       if [ -n "$TARGET_DESKTOP" ]; then
@@ -128,6 +144,8 @@ parts:
          sed -i 's/^Icon=.*/Icon=amd-gaia/' "${CRAFT_PART_INSTALL}/usr/share/applications/amd-gaia.desktop"
          sed -i 's/^Exec=.*/Exec=amd-gaia/' "${CRAFT_PART_INSTALL}/usr/share/applications/amd-gaia.desktop"
       fi
+       
+      sed -i 's/^Icon=.*/Icon=amd-gaia/' "${CRAFT_PART_INSTALL}/usr/share/applications/amd-gaia.desktop"
 
   # PART 2: Python Framework Backend Compilation
   gaia-backend:
@@ -135,7 +153,7 @@ parts:
     after:
       - gaia-sideloads
     source: https://github.com/amd/gaia.git
-    source-tag: v0.19.0
+    source-tag: v0.20.0
     override-pull: |
       craftctl default
       echo "-e .[ui]" > "${CRAFT_PART_SRC}/requirements-extras.txt"
@@ -146,37 +164,38 @@ parts:
   gaia-sideloads:
     plugin: dump
     source: .
-    organize:
-      gaia-launcher.sh: bin/gaia-launcher.sh
     stage:
       - bin/gaia-launcher.sh
       - bin/socat
+      - _gaia_sandbox_patch.py
       - network-wizard/
-      - gaia/
       - usr/share/libdrm/
     prime:
       - bin/gaia-launcher.sh
       - bin/socat
+      - _gaia_sandbox_patch.py
       - network-wizard/
-      - gaia/
       - usr/share/libdrm/
     override-build: |
-      craftctl default
-      
-      # Pull and extract socat cleanly inside the container runtime environment
+      mkdir -p "${CRAFT_PART_INSTALL}/bin"
+
+      # 2. Manually deploy our launcher and low-level sandbox bootstrap patch scripts
+      cp -av "${CRAFT_PART_SRC}/gaia-launcher.sh" "${CRAFT_PART_INSTALL}/bin/gaia-launcher.sh"
+      cp -av "${CRAFT_PART_SRC}/_gaia_sandbox_patch.py" "${CRAFT_PART_INSTALL}/_gaia_sandbox_patch.py"
+
+      # 3. Download, extract, and stage port forwarding dependencies
       apt-get download socat
       dpkg-deb -x socat_*.deb .
-      mkdir -p "${CRAFT_PART_INSTALL}/bin"
       cp -aL usr/bin/socat "${CRAFT_PART_INSTALL}/bin/socat"
-      
-      # Copy network wizard assets directly into the partition tree location
+
+      # 4. Mirror the network wizard agent files for registration
       cp -r "${CRAFT_PART_SRC}/network-wizard" "${CRAFT_PART_INSTALL}/"
-      
-      # Link explicit graphics firmware descriptors safely
+
+      # 5. Patch fallback container hardware acceleration tables
       mkdir -p "${CRAFT_PART_INSTALL}/usr/share/libdrm"
       cp -av /usr/share/libdrm/amdgpu.ids "${CRAFT_PART_INSTALL}/usr/share/libdrm/" 2>/dev/null || true
-      
-      # Seed system management agent manifests into the framework global library mapping
+
+      # 6. Pre-seed the internal system agent discovery storage targets
       mkdir -p "${CRAFT_PART_INSTALL}/usr/share/gaia-agents/network-wizard"
       cp -av "${CRAFT_PART_SRC}/network-wizard/." "${CRAFT_PART_INSTALL}/usr/share/gaia-agents/network-wizard/"
 
@@ -190,4 +209,3 @@ passthrough:
       groq-key: ""
       tavily-key: ""
       serper-key: ""
-
