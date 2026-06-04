@@ -4,6 +4,10 @@
 
 This repository contains the official production deployment blueprints for packaging **GAIA** as a secure, strictly confined Snap. 
 
+**Requirements:**
+
+- Lemonade Server - running locally on the same computer (default), or on a remote system (see config below).
+
 ---
 
 ## 🚀 User Configuration & Setup Guide
