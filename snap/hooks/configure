@@ -1,20 +1,14 @@
 #!/bin/bash
 set -e
 
-# =====================================================================
-# 🌐 GENERIC RUNTIME CONFIGURATION HOOK SCHEMA
-# =====================================================================
-
-# Establish a generic local backend server path baseline if completely empty
+# Establish a generic local backend server path baseline if completely unassigned
 if [ -z "$(snapctl get backend.url)" ]; then
     snapctl set backend.url="http://127.0.0.1:13305"
 fi
 
-# Initialize pristine empty strings for the API credentials namespace.
-# This ensures the keys exist in the snap database configuration matrix
-# without throwing uninitialized pointer faults on cold boot.
-for key in keys.openai keys.anthropic keys.groq keys.tavily keys.serper; do
-    if [ -z "$(snapctl get $key)" ]; then
-        snapctl set $key=""
+# Initialize empty state strings for the API credentials namespace
+for provider in openai anthropic groq tavily serper; do
+    if [ -z "$(snapctl get "keys.${provider}")" ]; then
+        snapctl set "keys.${provider}"=""
     fi
 done

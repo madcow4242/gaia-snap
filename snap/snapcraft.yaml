@@ -1,7 +1,3 @@
-# =====================================================================
-# 🛡️ AI DEVELOPER GUARDRAIL: REGRESSION PREVENTION DIRECTIVE
-# =====================================================================
-
 name: amd-gaia
 title: AMD GAIA Desktop Environment
 summary: Local AI agent framework with hardware acceleration classic mode
@@ -63,17 +59,10 @@ parts:
       - python3-setuptools
     override-build: |
       craftctl set version="0.20.0"
-      echo "🛰️ Compiling Python Backend Assets portably inside classic container namespace..."
+      echo "LOG: Compiling Python Backend Assets portably inside classic container namespace..."
       python3 -m venv "${CRAFT_PART_INSTALL}/venv"
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install --upgrade pip setuptools wheel
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install "${CRAFT_PART_SRC}/.[ui]"
-      
-      # ⚡ THE STANDARD HOOK INJECTION MATRIX
-      # Drop the patch file natively into the clean isolated squashfs layout venv 
-      TARGET_SITE_PACKAGES="${CRAFT_PART_INSTALL}/venv/lib/python3.12/site-packages"
-      echo "💉 Baking memory runtime interceptor permanently into production site-packages..."
-      cp -af "${CRAFT_STAGE}/_gaia_sandbox_patch.py" "${TARGET_SITE_PACKAGES}/sitecustomize.py"
-      chmod 644 "${TARGET_SITE_PACKAGES}/sitecustomize.py"
 
   # PART 3: Sideload configuration launcher and operational hooks
   gaia-sideloads:
@@ -81,16 +70,21 @@ parts:
     source: .
     stage:
       - bin/gaia-launcher.sh
-      - _gaia_sandbox_patch.py
+      - lib/python_patches/sitecustomize.py
       - snap/hooks/configure
     prime:
       - bin/gaia-launcher.sh
-      - _gaia_sandbox_patch.py
+      - lib/python_patches/sitecustomize.py
       - snap/hooks/configure
     override-build: |
+      echo "LOG: Setting up local sideload folder structures inside build isolation container..."
+      
+      # Explicitly construct the target destination directories inside the install path root
       mkdir -p "${CRAFT_PART_INSTALL}/bin"
       mkdir -p "${CRAFT_PART_INSTALL}/snap/hooks"
+      mkdir -p "${CRAFT_PART_INSTALL}/lib/python_patches"
+      
+      # Execute copy operations mapping the patch directly to Python's initialization file target
       cp -av "${CRAFT_PART_SRC}/gaia-launcher.sh" "${CRAFT_PART_INSTALL}/bin/gaia-launcher.sh"
-      cp -av "${CRAFT_PART_SRC}/_gaia_sandbox_patch.py" "${CRAFT_PART_INSTALL}/_gaia_sandbox_patch.py"
-      # 🎯 Package the hook binary precisely into the snap meta sector
+      cp -av "${CRAFT_PART_SRC}/_gaia_sandbox_patch.py" "${CRAFT_PART_INSTALL}/lib/python_patches/sitecustomize.py"
       cp -av "${CRAFT_PART_SRC}/snap/hooks/configure" "${CRAFT_PART_INSTALL}/snap/hooks/configure"
