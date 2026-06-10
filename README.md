@@ -39,6 +39,10 @@ Swap your target inference backend or add optional credential configurations on 
   sudo snap set amd-gaia keys.tavily="tvly-..."
   sudo snap set amd-gaia keys.serper="api-..."</code></pre>
 
+  #### Option D: Configure max-steps (how many actions an agent is allowed to take per query)
+  <pre><code>  sudo snap set amd-gaia backend.maxsteps=15</code></pre>
+  The default number of steps is 60.
+
 ---
 
 ## 🛠️ Applied Architecture Workarounds (Why & How)

@@ -47,6 +47,14 @@ for service in openai anthropic groq tavily serper; do
     fi
 done
 
+# set max-steps for Gaia workflows
+MAX_STEPS=$(snapctl get backend.maxsteps)
+if [ -z "MAX_STEPS" ]; then
+    MAX_STEPS=20
+fi
+export GAIA_MAX_STEPS="${MAX_STEPS}"
+echo "[CONFIG] Set max-steps to $GAIA_MAX_STEPS"
+
 export HTTP_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 export REBUILD_USER_AGENT="${HTTP_USER_AGENT}"
 
@@ -57,4 +65,4 @@ if [ -z "$TARGET_EXEC" ]; then
 fi
 
 echo "LOG: Initializing GAIA Portable Production Core Infrastructure Engine..."
-exec "$TARGET_EXEC" --no-sandbox --disable-dev-shm-usage "$@"
+exec "$TARGET_EXEC" --no-sandbox --disable-dev-shm-usage --max-steps=$GAIA_MAX_STEPS "$@"

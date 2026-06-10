@@ -6,6 +6,11 @@ if [ -z "$(snapctl get backend.url)" ]; then
     snapctl set backend.url="http://127.0.0.1:13305"
 fi
 
+# Set max-steps to a reasonable default if not configured
+if [ -z "$(snapctl get backend.maxsteps)" ]; then
+    snapctl set backend.maxsteps=50
+fi
+
 # Initialize empty state strings for the API credentials namespace
 for provider in openai anthropic groq tavily serper; do
     if [ -z "$(snapctl get "keys.${provider}")" ]; then

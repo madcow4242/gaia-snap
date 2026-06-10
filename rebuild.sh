@@ -6,7 +6,7 @@ set -e
 # =====================================================================
 
 # Baseline target environment parameters
-#TARGET_BACKEND_URL="http://192.168.1.109:13305"
+TARGET_BACKEND_URL="http://192.168.1.109:13305"
 OPENAI_API_KEY="sk-proj-openai-test-key-vector-abcde12345"
 ANTHROPIC_API_KEY="sk-ant-api53-test-key-tokens-67890fghij"
 GROQ_API_KEY=""
@@ -60,6 +60,9 @@ sudo snap set amd-gaia keys.anthropic="$ANTHROPIC_API_KEY"
 sudo snap set amd-gaia keys.groq="$GROQ_API_KEY"
 sudo snap set amd-gaia keys.tavily="$TAVILY_API_KEY"
 sudo snap set amd-gaia keys.serper="$SERPER_API_KEY"
+
+echo "[DEPLOYMENT] snap set backend.maxsteps=60..."
+sudo snap set amd-gaia backend.maxsteps=60
 
 # Maintain local file fallback synchronization framework as a backup testbed safety net
 BOOTSTRAP_DIR="${HOME}/.gaia/bootstrap"
