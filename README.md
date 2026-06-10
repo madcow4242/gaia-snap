@@ -75,7 +75,7 @@ Copy your valid, GAIA-compliant Python agent file (incorporating the standard Ag
   <pre><code>cp your_custom_agent.py ~/.gaia/agents/zoo-agent/agent.py</code></pre>
 
   #### If installing multiple custom agents
-  Instead of dropping a single agent.py file into the existing sample zoo-agent directory, create a new folder for your agent under ~/.gaia.agents/ and put your agent.py file there.  Note that the agent file entry point must be called agent.py for Gaia to pick it up automatically.
+  Instead of dropping a single agent.py file into the existing sample zoo-agent directory, create a new folder for your agent under ~/.gaia/agents/ and put your agent.py file there.  Note that the agent file entry point must be called agent.py for Gaia to pick it up automatically.
   <pre><code>  mkdir ~/.gaia/agents/my_agent
   cp your_custom_agent.py ~/.gaia/agents/my_agent/agent.py
   cp other_needed_files ~/.gaia/agents/my_agent/</code></pre>
