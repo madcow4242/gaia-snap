@@ -70,9 +70,7 @@ Copy your valid, GAIA-compliant Python agent file (incorporating the standard Ag
   #### Copy your custom python file to the application's active agent folder
   <pre><code>cp your_custom_agent.py ~/.gaia/agents/zoo-agent/agent.py</code></pre>
 
-### Step 2: Restart the Gaia snap
-Flush active background run states to force the engine to index and load your script:
+### Step 2: Restart the Application
+Simply close the GAIA desktop application (or click "Quit" from the system tray icon) and relaunch it from your application menu. 
 
-  <pre><code>snap restart amd-gaia</code></pre>
-
-When GAIA boots back open, it will dynamically register your custom capabilities and expose them cleanly inside the desktop chat selector dropdown menus!
+When the application boots back open, the framework will automatically scan the folder, index your script, and display your custom agent cleanly inside the chat dropdown menus!
