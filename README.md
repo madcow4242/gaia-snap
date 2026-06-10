@@ -12,12 +12,12 @@ Classic confinement ensures GAIA can natively interact with your host system's h
 ## ⚙️ Prerequisites & System Requirements
 
 ### 1. The AI Processing Server (lemonade-server)
-GAIA requires an OpenAI API-compatible inference engine. It is designed to pair directly with the companion lemonade-server snap package, which can be hosted locally or on a dedicated machine inside your network:
+GAIA requires an OpenAI API-compatible inference engine. This snap package is designed to pair directly with the companion lemonade-server snap package, which can be hosted locally or on a dedicated machine inside your network:
 
   <pre><code>sudo snap install lemonade-server</code></pre>
 
 ### 🧠 VRAM & Hardware Allocation Guidelines
-* Systems with >= 24GB VRAM: Can run standard default agents.
+* Systems with >= 24GB VRAM: Can run standard default agents. (16GB may work, but requires confirmation on your particular system)
 * Systems with < 24GB VRAM (e.g., 16GB laptops): Select the "lite" agent variations inside the UI to leverage optimized, smaller models (e.g., Gemma-4-E4B-it-GGUF).
 
 ---
@@ -39,9 +39,9 @@ Swap your target inference backend or add optional credential configurations on 
   sudo snap set amd-gaia keys.tavily="tvly-..."
   sudo snap set amd-gaia keys.serper="api-..."</code></pre>
 
-  #### Option D: Configure max-steps (how many actions an agent is allowed to take per query)
+### Configure max-steps
+  The default number of discreet steps that an agent is allowed to take for each query is defaulted to 60 in this snap (which is quite high).  To change it to any value you prefer, use:
   <pre><code>  sudo snap set amd-gaia backend.maxsteps=15</code></pre>
-  The default number of steps is 60.
 
 ---
 
