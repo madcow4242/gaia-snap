@@ -49,7 +49,7 @@ done
 
 # set max-steps for Gaia workflows
 MAX_STEPS=$(snapctl get backend.maxsteps)
-if [ -z "MAX_STEPS" ]; then
+if [ -z "$MAX_STEPS" ]; then
     MAX_STEPS=20
 fi
 export GAIA_MAX_STEPS="${MAX_STEPS}"
