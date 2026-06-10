@@ -74,7 +74,13 @@ Copy your valid, GAIA-compliant Python agent file (incorporating the standard Ag
   #### Copy your custom python file to the application's active agent folder
   <pre><code>cp your_custom_agent.py ~/.gaia/agents/zoo-agent/agent.py</code></pre>
 
-### Step 2: Restart the Application
-Simply close the GAIA desktop application (or click "Quit" from the system tray icon) and relaunch it from your application menu. 
+  #### If installing multiple custom agents
+  Instead of dropping a single agent.py file into the existing sample zoo-agent directory, create a new folder for your agent under ~/.gaia.agents/ and put your agent.py file there.  Note that the agent file entry point must be called agent.py for Gaia to pick it up automatically.
+  <pre><code>  mkdir ~/.gaia/agents/my_agent
+  cp your_custom_agent.py ~/.gaia/agents/my_agent/agent.py
+  cp other_needed_files ~/.gaia/agents/my_agent/</code></pre>
 
-When the application boots back open, the framework will automatically scan the folder, index your script, and display your custom agent cleanly inside the chat dropdown menus!
+### Step 2: Restart the Application
+Simply close the GAIA desktop application (click "Quit" from the system tray icon) and relaunch it from your application menu.  Note that closing the Gaia window with the X at the top-right does not actually close the program - it just hides the UI.  Gaia must be fully exited and restarted to see your new agent.
+
+When the application restarts, the framework will automatically scan the folder, index your script, and display your custom agent in the agent selection list.
