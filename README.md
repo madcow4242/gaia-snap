@@ -26,13 +26,13 @@ GAIA requires an OpenAI API-compatible inference engine. It is designed to pair 
 ### Managing AI Backend Connections
 Swap your target inference backend or add optional credential configurations on the fly via the native snap set utility:
 
-  # Option A: Route to a local Lemonade/Ollama instance (Default)
+  #### Option A: Route to a local Lemonade/Ollama instance (Default)
   <pre><code>sudo snap set amd-gaia backend.url="http://127.0.0.1:13305"</code></pre>
 
-  # Option B: Offload processing to a high-performance LAN server
+  #### Option B: Offload processing to a high-performance LAN server
   <pre><code>sudo snap set amd-gaia backend.url="http://192.168.1.109:13305"</code></pre>
 
-  # Option C: Seed optional API provider keys for advanced search/triage tools
+  #### Option C: Seed optional API provider keys for advanced search/triage tools
   <pre><code>  sudo snap set amd-gaia keys.openai="sk-proj-..."
   sudo snap set amd-gaia keys.anthropic="sk-ant-..."
   sudo snap set amd-gaia keys.tavily="tvly-..."
@@ -54,7 +54,7 @@ To deliver a portable package that skips initial asset download phases and works
 
 You can compile, pack, and test the package files locally on your workstation using Snapcraft:
 
-  # Execute the automated compilation, cache cleanup, and local deployment loop
+  #### Execute the automated compilation, cache cleanup, and local deployment loop
   <pre><code>./rebuild.sh</code></pre>
 
 ---
@@ -66,7 +66,7 @@ Because this package utilizes Classic Confinement, adding your own custom high-p
 ### Step 1: Copy Your Agent Script
 Copy your valid, GAIA-compliant Python agent file (incorporating the standard Agent class inheritance and @register_agent decorators) straight into your active user folder:
 
-  # Copy your custom python file to the application's active agent folder
+  #### Copy your custom python file to the application's active agent folder
   <pre><code>cp your_custom_agent.py ~/.gaia/agents/zoo-agent/agent.py</code></pre>
 
 ### Step 2: Restart the Gaia snap
