@@ -1,6 +1,7 @@
-# 🤖 GAIA Desktop Framework Engine (Classic Snap Build Environment)
+# 🤖 GAIA Desktop Framework Engine 
+### (Classic Snap Build Environment)
 
-**GAIA Version Compliance:** Production Packaged Core (Current version: 0.20.0)
+**GAIA Version:** Current version: 0.20.0
 
 This repository contains the un-official production deployment blueprints for packaging [AMD's GAIA framework](https://github.com/amd/gaia) as a portable Linux Snap configured under Classic Confinement. 
 
