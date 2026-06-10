@@ -47,7 +47,7 @@ parts:
 
   # PART 2: Python Framework Backend Compilation
   gaia-backend:
-    plugin: nil
+    plugin: python
     after:
       - gaia-sideloads
     source: https://github.com/amd/gaia.git
@@ -60,8 +60,16 @@ parts:
     override-build: |
       craftctl set version="0.20.0"
       echo "LOG: Compiling Python Backend Assets portably inside classic container namespace..."
+
+      # 1. Initialize our clean standalone environment
       python3 -m venv "${CRAFT_PART_INSTALL}/venv"
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install --upgrade pip setuptools wheel
+
+      # 2. Grab the standard portable runtime wheels quickly
+      echo "LOG: Fetching portable vector processing wheels..."
+      "${CRAFT_PART_INSTALL}/venv/bin/pip" install faiss-cpu
+
+      # 3. Install top-level framework components
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install "${CRAFT_PART_SRC}/.[ui]"
 
   # PART 3: Sideload configuration launcher and operational hooks
@@ -79,12 +87,10 @@ parts:
     override-build: |
       echo "LOG: Setting up local sideload folder structures inside build isolation container..."
       
-      # Explicitly construct the target destination directories inside the install path root
       mkdir -p "${CRAFT_PART_INSTALL}/bin"
       mkdir -p "${CRAFT_PART_INSTALL}/snap/hooks"
       mkdir -p "${CRAFT_PART_INSTALL}/lib/python_patches"
       
-      # Execute copy operations mapping the patch directly to Python's initialization file target
       cp -av "${CRAFT_PART_SRC}/gaia-launcher.sh" "${CRAFT_PART_INSTALL}/bin/gaia-launcher.sh"
       cp -av "${CRAFT_PART_SRC}/_gaia_sandbox_patch.py" "${CRAFT_PART_INSTALL}/lib/python_patches/sitecustomize.py"
       cp -av "${CRAFT_PART_SRC}/snap/hooks/configure" "${CRAFT_PART_INSTALL}/snap/hooks/configure"

@@ -5,10 +5,32 @@ Provides automated tool clearance loops by hooking validation contexts inside me
 
 import os
 import sys
+import ctypes
 import threading
 import fastapi.applications
 from fastapi import FastAPI, APIRouter
 from pydantic import BaseModel
+
+# =====================================================================
+# HARDWARE ACCELERATION VECTOR VECTOR BLAS/FAISS HOOKS
+# =====================================================================
+try:
+    # Force runtime search pathways to evaluate host system paths first
+    # This lets us steal the host's AVX2 optimized BLAS/LAPACK routines if present!
+    host_lib_paths = ['/usr/lib/x86_64-linux-gnu', '/usr/lib64', '/usr/lib']
+
+    for path in host_lib_paths:
+        openblas_target = os.path.join(path, 'libopenblas.so.3')
+        if os.path.exists(openblas_target):
+            # Pre-load host optimized math matrices into global process space
+            ctypes.CDLL(openblas_target, mode=ctypes.RTLD_GLOBAL)
+            print(f"INFO: [GAIA HARDWARE OVRD] Successfully hijacked host accelerated matrix math: {openblas_target}",
+                  flush=True)
+            break
+
+except Exception as hw_err:
+    print(f"INFO: [GAIA HARDWARE OVRD] Host math optimization routing deferred: {hw_err}", flush=True)
+
 
 # Force suppress auto-update checking loops across both application layers
 os.environ["GAIA_DISABLE_UPDATE"] = "1"          # Frontend Electron UI toggle
