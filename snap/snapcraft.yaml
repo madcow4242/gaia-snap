@@ -28,9 +28,13 @@ lint:
     - classic:
         - "opt/GAIA/**"
         - "venv/**"
+        - "usr/bin/**"
+        - "usr/lib/**"
     - library:
         - "opt/GAIA/**"
         - "venv/**"
+        - "usr/lib/*/libicuio.so*"
+        - "usr/lib/*/libicutest.so*"
 
 apps:
   amd-gaia:
@@ -104,3 +108,10 @@ parts:
       cp -av "${CRAFT_PART_SRC}/gaia-launcher.sh" "${CRAFT_PART_INSTALL}/bin/gaia-launcher.sh"
       cp -av "${CRAFT_PART_SRC}/_gaia_sandbox_patch.py" "${CRAFT_PART_INSTALL}/lib/python_patches/sitecustomize.py"
       cp -av "${CRAFT_PART_SRC}/snap/hooks/configure" "${CRAFT_PART_INSTALL}/snap/hooks/configure"
+
+  # Stage tools useful in gaia
+  deps:
+    plugin: nil
+    build-attributes: [ enable-patchelf ]
+    stage-packages:
+      - ocrmypdf
