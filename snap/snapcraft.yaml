@@ -45,6 +45,15 @@ parts:
       - gaia-backend
     source: https://github.com/amd/gaia/releases/download/v0.20.0/gaia-agent-ui-0.20.0-amd64.deb
     source-type: deb
+    override-prime: |
+      craftctl default
+      # Unpack the tray icon from the ASAR so AppIndicator (a separate process)
+      # can read it directly from the filesystem. Electron automatically uses
+      # app.asar.unpacked/<path> when it exists instead of the ASAR-virtual path,
+      # giving AppIndicator a real file path it can open.
+      mkdir -p "${CRAFT_PRIME}/opt/GAIA/resources/app.asar.unpacked/assets"
+      cp "${CRAFT_PRIME}/usr/share/icons/hicolor/512x512/apps/gaia-desktop.png" \
+         "${CRAFT_PRIME}/opt/GAIA/resources/app.asar.unpacked/assets/icon.png"
 
   # PART 2: Python Framework Backend Compilation
   gaia-backend:
