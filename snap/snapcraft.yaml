@@ -35,6 +35,7 @@ lint:
 apps:
   amd-gaia:
     command: bin/gaia-launcher.sh
+    desktop: usr/share/applications/gaia-desktop.desktop
 
 parts:
   # PART 1: UI Desktop Archive Extraction
