@@ -15,6 +15,9 @@ export PYTHONNOUSERSITE=1
 export GAIA_DISABLE_UPDATE=1
 export GAIA_DISABLE_UPDATE_CHECK="true"
 
+# Specify TMPDIR needed for appindicator
+export TMPDIR=$XDG_RUNTIME_DIR
+
 # 🎯 THE UNIVERSAL PORTABLE PATCH INJECTOR
 # We append the read-only snap environment folder to PYTHONPATH.
 # This forces whichever Python interpreter GAIA launches (host or snap)
