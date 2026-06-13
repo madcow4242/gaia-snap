@@ -20,8 +20,10 @@ donation: https://github.com/amd/gaia
 grade: stable
 confinement: classic
 base: core24
-
 icon: snap/gui/amd-gaia.png
+
+platforms:
+  amd64:
 
 lint:
   ignore:
