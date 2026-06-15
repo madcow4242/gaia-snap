@@ -153,7 +153,7 @@ if [ "$BUILD_LXD" = true ]; then
     echo "LOG: Generating portable, standalone LXD distribution artifact..."
 
     # Define the uniform output file layout pattern containing "LXD" clearly in the title
-    LXD_OUTPUT_NAME="amd-gaia_${GAIA_VERSION}_LXD-sandbox.tar.gz"
+    LXD_OUTPUT_NAME="gaia-desktop_${GAIA_VERSION}_LXD-sandbox.tar.gz"
 
     # Clean up any stale legacy export files if present in the workspace directory
     rm -f "./${LXD_OUTPUT_NAME}"

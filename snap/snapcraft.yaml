@@ -1,4 +1,4 @@
-name: amd-gaia
+name: gaia-desktop
 title: AMD GAIA Desktop Environment
 summary: Local AI agent framework with hardware acceleration classic mode
 description: |
@@ -40,7 +40,7 @@ lint:
         - "usr/lib/*/libicutest.so*"
 
 apps:
-  amd-gaia:
+  gaia-desktop:
     command: bin/gaia-launcher.sh
     desktop: usr/share/applications/gaia-desktop.desktop
 

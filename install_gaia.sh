@@ -74,13 +74,13 @@ if [[ "$TOPOLOGY_CHOICE" == "1" ]]; then
     sudo snap install "$SNAP_PACKAGE" --dangerous --classic
 
     echo "LOG: Synchronizing native Snap configuration parameters database..."
-    sudo snap set amd-gaia backend.url="$BACKEND_URL"
-    sudo snap set amd-gaia backend.maxsteps="$AGENT_STEPS"
-    sudo snap set amd-gaia keys.openai="$OPENAI_KEY"
-    sudo snap set amd-gaia keys.anthropic="$ANTHROPIC_KEY"
-    sudo snap set amd-gaia keys.groq="$GROQ_KEY"
-    sudo snap set amd-gaia keys.tavily="$TAVILY_KEY"
-    sudo snap set amd-gaia keys.serper="$SERPER_KEY"
+    sudo snap set gaia-desktop backend.url="$BACKEND_URL"
+    sudo snap set gaia-desktop backend.maxsteps="$AGENT_STEPS"
+    sudo snap set gaia-desktop keys.openai="$OPENAI_KEY"
+    sudo snap set gaia-desktop keys.anthropic="$ANTHROPIC_KEY"
+    sudo snap set gaia-desktop keys.groq="$GROQ_KEY"
+    sudo snap set gaia-desktop keys.tavily="$TAVILY_KEY"
+    sudo snap set gaia-desktop keys.serper="$SERPER_KEY"
 
     echo "====================================================================="
     echo " ✨ SUCCESS: GAIA Snap Topology Installed Successfully!"
@@ -104,7 +104,7 @@ elif [[ "$TOPOLOGY_CHOICE" == "2" ]]; then
     # 2. Process container image validations & incremental timestamp upgrades
     if [ -z "${LXD_TARBALL}" ]; then
         if ! lxc info gaia-runtime-sandbox >/dev/null 2>&1; then
-            echo "❌ ERROR: Portable archive 'amd-gaia_${GAIA_VERSION}_LXD-sandbox.tar.gz' not found in workspace."
+            echo "❌ ERROR: Portable archive 'gaia-desktop_${GAIA_VERSION}_LXD-sandbox.tar.gz' not found in workspace."
             echo "Please place the pre-baked tarball artifact here or compile it using: ./rebuild.sh --snap --lxd"
             exit 1
         fi
@@ -164,13 +164,13 @@ elif [[ "$TOPOLOGY_CHOICE" == "2" ]]; then
 
     # 6. Synchronize configuration keys directly into internal Snap database
     echo "LOG: Populating native nested Snap configuration engine database..."
-    lxc exec gaia-runtime-sandbox -- snap set amd-gaia backend.url="$BACKEND_URL"
-    lxc exec gaia-runtime-sandbox -- snap set amd-gaia backend.maxsteps="$AGENT_STEPS"
-    lxc exec gaia-runtime-sandbox -- snap set amd-gaia keys.openai="$OPENAI_KEY"
-    lxc exec gaia-runtime-sandbox -- snap set amd-gaia keys.anthropic="$ANTHROPIC_KEY"
-    lxc exec gaia-runtime-sandbox -- snap set amd-gaia keys.groq="$GROQ_KEY"
-    lxc exec gaia-runtime-sandbox -- snap set amd-gaia keys.tavily="$TAVILY_KEY"
-    lxc exec gaia-runtime-sandbox -- snap set amd-gaia keys.serper="$SERPER_KEY"
+    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop backend.url="$BACKEND_URL"
+    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop backend.maxsteps="$AGENT_STEPS"
+    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop keys.openai="$OPENAI_KEY"
+    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop keys.anthropic="$ANTHROPIC_KEY"
+    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop keys.groq="$GROQ_KEY"
+    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop keys.tavily="$TAVILY_KEY"
+    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop keys.serper="$SERPER_KEY"
 
     # 7. Provision paths validation cache JSON to satisfy internal security policies
     if [ -n "$RESOLVED_HOST_PATH" ]; then
@@ -197,7 +197,7 @@ EOF"
         ALLOWED_PATHS="${RESOLVED_HOST_PATH}" \
         allowed_paths="${RESOLVED_HOST_PATH}" \
         GAIA_ALLOWED_PATHS="${RESOLVED_HOST_PATH}" \
-        /snap/bin/amd-gaia --no-sandbox
+        /snap/bin/gaia-desktop --no-sandbox
 
 # ---------------------------------------------------------------------
 # ROADMAP TOPOLOGIES

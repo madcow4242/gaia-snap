@@ -1,4 +1,4 @@
-name: amd-gaia
+name: gaia-desktop
 summary: Production-grade chiseled container engine for GAIA orchestration
 description: |
   An OCI-compliant secure microservice instance of the GAIA framework 
