@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# =====================================================================
+# 1. SNAP CONFIGURATION DATABASE INITIALIZATION (YOUR CORE LOGIC)
+# =====================================================================
+
 # Establish a generic local backend server path baseline if completely unassigned
 if [ -z "$(snapctl get backend.url)" ]; then
     snapctl set backend.url="http://127.0.0.1:13305"
@@ -17,3 +21,39 @@ for provider in openai anthropic groq tavily serper; do
         snapctl set "keys.${provider}"=""
     fi
 done
+
+# =====================================================================
+# 2. APPLICATION WORKSPACE COMPILATION ENGINE
+# =====================================================================
+
+# Pull the freshly verified parameters natively from the core database
+URL=$(snapctl get backend.url)
+STEPS=$(snapctl get backend.maxsteps)
+
+# Strip any trailing forward-slashes from the user input safely
+CLEAN_URL=$(echo "$URL" | sed 's:/*$::')
+
+# Establish uniform API route mapping definitions matching the lemonade-server layout
+if [[ "$CLEAN_URL" == */api/v1* ]]; then
+    BASE_URL="$CLEAN_URL"
+else
+    BASE_URL="${CLEAN_URL}/api/v1"
+fi
+
+# Ensure the targeted local workspace directory path exists inside the user's home registry
+mkdir -p "$HOME/.gaia"
+
+# Securely build the config manifest file directly where the binary reads it.
+# This completely bypasses Electron environment scrubbing loops on child nodes!
+cat << EOF > "$HOME/.gaia/config.json"
+{
+  "llm_url": "${CLEAN_URL}",
+  "backend": {
+    "url": "${BASE_URL}",
+    "max_steps": ${STEPS}
+  },
+  "profile": "minimal"
+}
+EOF
+
+echo "LOG: Native configuration hook successfully initialized states and compiled workspace maps."

@@ -1,0 +1,63 @@
+name: amd-gaia
+summary: Production-grade chiseled container engine for GAIA orchestration
+description: |
+  An OCI-compliant secure microservice instance of the GAIA framework 
+  running your portable optimizations inside a distroless runtime slice.
+version: &global_version "0.20.0" # ◄ THE SINGLE SOURCE OF TRUTH (Anchor)
+license: MIT
+
+# Base definitions enforcing zero-bloat chiseling rules
+base: bare
+build-base: ubuntu@24.04
+
+platforms:
+  amd64:
+
+parts:
+  # PART 1: Ingest and un-wrap our custom snap layout cleanly
+  gaia-container-runtime:
+    plugin: dump
+    source: .
+    build-packages:
+      - squashfs-tools
+    override-build: |
+      # Assign a local script variable by invoking the global anchor alias
+      TARGET_VERSION=*global_version
+      echo "LOG: Materializing Chiseled Rock configuration layout for version: ${TARGET_VERSION}"
+      
+      echo "LOG: Locating compiled desktop snap asset tracking footprints..."
+      TARGET_SNAP=$(ls -t *.snap | head -n 1)
+      
+      echo "LOG: Clearing stale intermediate extraction folders..."
+      rm -rf "${CRAFT_STAGE}/app_root"
+      
+      echo "LOG: Deep-extracting snap root contents into Chiseled Rock file layer..."
+      unsquashfs -f -d "${CRAFT_STAGE}/app_root" "${TARGET_SNAP}"
+      
+      echo "LOG: Relocating target workspace execution layers..."
+      mkdir -p "${CRAFT_PART_INSTALL}/bin"
+      mkdir -p "${CRAFT_PART_INSTALL}/opt/gaia_runtime"
+      
+      # Map the internal application execution pathways neatly
+      cp -af "${CRAFT_STAGE}/app_root/bin/gaia-launcher.sh" "${CRAFT_PART_INSTALL}/bin/gaia-launcher"
+      cp -rf "${CRAFT_STAGE}/app_root/"* "${CRAFT_PART_INSTALL}/opt/gaia_runtime/"
+
+  # PART 2: Slice in bare-minimum system dependencies (Chiseling)
+  system-dependencies:
+    plugin: nil
+    stage-packages:
+      - libc6
+      - libstdc++6
+      - python3-minimal # Light structural layer to process our python patches
+
+# Compliant service schema utilizing explicit override behavior properties
+services:
+  gaia-service:
+    override: replace
+    command: bin/gaia-launcher
+    working-dir: /opt/gaia_runtime
+    environment:
+      SNAP: /opt/gaia_runtime
+      PYTHONPATH: /opt/gaia_runtime/lib/python_patches
+      HOME: /root
+      STARTUP: enabled
