@@ -5,7 +5,6 @@ description: |
   GAIA is an advanced local AI worker orchestration desktop environment.
   This version uses classic confinement for production host integration.
 
-# This dictates that whichever part runs 'craftctl set version' defines the entire Snap package file version
 adopt-info: gaia-backend
 
 license: MIT
@@ -45,73 +44,57 @@ apps:
     desktop: usr/share/applications/gaia-desktop.desktop
 
 parts:
-  # PART 1: Python Framework Backend Compilation
+  # PART 1: Python Framework Backend Compilation (Zero Host Overhead)
   gaia-backend:
     plugin: python
     after:
       - gaia-sideloads
     source: https://github.com/amd/gaia.git
-    # We strip the static 'source-tag' field from here and handle cloning
-    # fluidly via the version variable down inside the override loop!
     build-packages:
       - python3-dev
       - python3-pip
       - python3-venv
       - python3-setuptools
-      - git  # Guaranteed to be present for dynamic checkout
+      - git
     override-build: |
-      # =====================================================================
-      # THE SINGLE SOURCE OF TRUTH FOR THE SNAP BUILD SYSTEM
-      # =====================================================================
-      VERSION_TAG="0.20.0" # <- CHANGE THIS ONCE TO UPDATE THE WHOLE SNAP
+      VERSION_TAG="0.20.0"
        
       echo "LOG: Setting global snap orchestration metadata target version to: ${VERSION_TAG}"
       craftctl set version="${VERSION_TAG}"
        
       echo "LOG: Clearing any stale target workspace directories inside the build isolation container..."
-      # FIX: Wipe out any previous residual clones so Git doesn't panic
       rm -rf "${CRAFT_PART_SRC}/cloned-framework"
        
       echo "LOG: Checking out specific tag workspace branch inside build isolation container..."
       git clone --branch "v${VERSION_TAG}" https://github.com/amd/gaia.git "${CRAFT_PART_SRC}/cloned-framework"
        
       echo "LOG: Compiling Python Backend Assets portably inside classic container namespace..."
-      # Initialize our clean standalone environment
       python3 -m venv "${CRAFT_PART_INSTALL}/venv"
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install --upgrade pip setuptools wheel
        
-      # Grab the standard portable runtime wheels quickly
       echo "LOG: Fetching portable vector processing wheels..."
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install faiss-cpu
        
-      # Install top-level framework components from our synchronized branch tag path location
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install "${CRAFT_PART_SRC}/cloned-framework/.[ui]"
 
-  # PART 2: UI Desktop Archive Extraction (UNIFIED & DE-DUPLICATED)
+  # PART 2: UI Desktop Archive Extraction (Zero Host Overhead)
   gaia-desktop:
-    plugin: dump
+    plugin: nil
     after:
       - gaia-backend
-    source: .
     build-packages:
       - wget
     override-build: |
-      # Re-extract the dynamically resolved global package version assigned by gaia-backend
       RESOLVED_VERSION=$(craftctl get version)
       echo "LOG: Downloading compiled asset package dependencies for iteration layout version: ${RESOLVED_VERSION}"
        
       TARGET_DEB_URL="https://github.com/amd/gaia/releases/download/v${RESOLVED_VERSION}/gaia-agent-ui-${RESOLVED_VERSION}-amd64.deb"
        
-      # Natively stream and extract the Debian package blueprint into our active installation footprint
       wget -qO /tmp/gaia-desktop.deb "${TARGET_DEB_URL}"
       dpkg-deb -x /tmp/gaia-desktop.deb "${CRAFT_PART_INSTALL}"
       rm -f /tmp/gaia-desktop.deb
     override-prime: |
       craftctl default
-      # Unpack the tray icon from the ASAR so AppIndicator (a separate process)
-      # can read it directly from the filesystem. Electron automatically uses
-      # app.asar.unpacked/<path> when it exists instead of the ASAR-virtual path,
-      # giving AppIndicator a real file path it can open.
       mkdir -p "${CRAFT_PRIME}/opt/GAIA/resources/app.asar.unpacked/assets"
       cp "${CRAFT_PRIME}/usr/share/icons/hicolor/512x512/apps/gaia-desktop.png" \
          "${CRAFT_PRIME}/opt/GAIA/resources/app.asar.unpacked/assets/icon.png"
@@ -119,7 +102,7 @@ parts:
   # PART 3: Sideload configuration launcher and operational hooks
   gaia-sideloads:
     plugin: dump
-    source: .
+    source: src_sideloads  # ◄--- FIXED: Points ONLY to our clean isolated sub-folder!
     stage:
       - bin/gaia-launcher.sh
       - lib/python_patches/sitecustomize.py
@@ -139,7 +122,6 @@ parts:
       cp -av "${CRAFT_PART_SRC}/_gaia_sandbox_patch.py" "${CRAFT_PART_INSTALL}/lib/python_patches/sitecustomize.py"
       cp -av "${CRAFT_PART_SRC}/snap/hooks/configure" "${CRAFT_PART_INSTALL}/snap/hooks/configure"
 
-  # Stage tools useful in gaia
   deps:
     plugin: nil
     build-attributes: [ enable-patchelf ]

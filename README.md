@@ -3,11 +3,11 @@
 
 **GAIA Version:** Current version: 0.20.0
 
-This repository contains the production deployment blueprints for packaging [AMD's GAIA framework](https://github.com/amd/gaia) as a portable Linux Snap configured under Classic Confinement as `gaia-desktop`.  
+This repository contains the production deployment blueprints for packaging [AMD's GAIA framework](https://github.com/amd/gaia) as a portable Linux Snap configured under Classic Confinement as `gaia-desktop`.  It also builds an OCI-compliant container image (Rock) and an LXD-compatible container image.  There is an installer script to help automate installing via your preferred route.
 
 > **NOTE:** GAIA is not tied exclusively to AMD hardware. As long as your chosen AI inference backend supports your execution hardware, GAIA will interact with it seamlessly. The companion `lemonade-server` engine, for example, natively supports acceleration across CPU, GPU, and NPU architectures from multiple hardware vendors (AMD, Intel, NVIDIA, etc.).
 
-Classic confinement ensures `gaia-desktop` can natively interact with your host system's hardware acceleration profiles and absolute file paths while keeping the runtime environment insulated from upstream code drift.
+The classic confinement Snap package ensures `gaia-desktop` can natively interact with your host system's hardware acceleration profiles and absolute file paths while keeping the runtime environment insulated from upstream code drift.  The other container formats are more restrictive and help isolate agent access to only the folder(s) that you specify.
 
 ---
 
@@ -28,7 +28,7 @@ sudo snap install lemonade-server
 
 ## 🌐 Deployment Topologies
 
-The application features an interactive, frontloaded installer script (`install_gaia.sh`) that asks all hardware, routing, and access questions immediately upon execution so you can run the configuration and walk away.
+The application features an interactive, frontloaded installer script (`install_gaia.sh`) that asks all hardware, routing, and access questions.
 
 ```bash
 chmod +x ./install_gaia.sh
@@ -36,21 +36,21 @@ chmod +x ./install_gaia.sh
 ```
 
 ### Option 1: Native Ubuntu Desktop Application (Snap Layer)
-Select **Option 1** from the interactive setup menu. This instantly deploys the pre-compiled `.snap` package directly onto your host operating system using native unconfined system-layer integration flags.
+Select **Option 1** from the interactive setup menu. This deploys the pre-compiled `.snap` package directly onto your host operating system using native unconfined system-layer integration flags.
 
 ### Option 2: Secure Isolated System Container Sandbox (LXD Engine) [Recommended]
-Select **Option 2** from the interactive setup menu. This architecture deploys and boots GAIA portably inside an unprivileged system container while maintaining deep, identical host-level directory access. 
+Select **Option 2** from the interactive setup menu. This architecture deploys and boots GAIA portably inside an unprivileged system container while granting optional directory access to a host system folder you specify on installation. 
 
-* **Autonomous Standalone Importing:** The installer automatically scans the workspace directory for the pre-baked container distribution package (`amd-gaia_0.20.0_LXD-sandbox.tar.gz`). If it is not registered on your machine yet, or if a fresh compilation update is detected via filesystem timestamp analysis, the installer automatically purges old instances and restores the environment instantly using `lxc import`.
+* **Autonomous Standalone Importing:** The installer automatically scans the workspace directory for the pre-baked container distribution package (`gaia-desktop_0.20.0_LXD-sandbox.tar.gz`). If it is not registered on your machine yet, or if a fresh compilation update is detected via filesystem timestamp analysis, the installer automatically purges old instances and restores the environment using `lxc import`.
 * **GPU Passthrough:** Natively passes physical graphics device endpoints (`/dev/dri`) directly across the unprivileged sandbox partition boundary so the Electron window manager handles UI rendering via local hardware acceleration instead of draining host CPU cycles.
-* **Direct Host Path Mirroring:** If you choose to expose a host folder workspace (e.g., `/home/kevin/Documents`), the engine maps an identical absolute file path layout inside the container using real-time kernel namespace shifts (`raw.idmap`).
-* **Zero Translation Queries:** Your AI agents can read, process, and write files naturally using your actual host paths. Instructing an agent to write a document to `/home/kevin/Documents/report.txt` updates the true file on your host machine instantly with no path mapping conversion delay.
+* **Direct Host Path Mirroring:** If you choose to expose a host folder workspace (e.g., `/home/my_user/Documents`), the engine maps an identical absolute file path layout inside the container using real-time kernel namespace shifts (`raw.idmap`).
+* **Zero Translation Queries:** Your AI agents can read, process, and write files naturally using your actual host paths. Instructing an agent to write a document to `/home/my_user/Documents/report.txt` updates the true file on your host machine with no path mapping conversion delay.
 
 ---
 
 ## ⚙️ User Configuration & Setup Guide
 
-Swap your target inference backend or inject optional provider configurations on the fly via your native snap configuration database keys:
+Swap your target inference backend or inject optional provider configurations on the fly via your native snap configuration database keys (this is also done automatically by the installer script if you choose to enter those options):
 
 #### Option A: Route to a local Lemonade/Ollama instance (Default layout)
 ```bash
@@ -90,9 +90,13 @@ sudo snap set gaia-desktop backend.maxsteps=50
 You can compile target application packages and bake baseline sandbox container environments using the modular `rebuild.sh` workspace runner.
 
 ### Run Full Pipeline Compilation
-Executing the script with no parameters automatically triggers a full compilation: it builds the core host Snap, packs the chiseled OCI Rock bundle, configures base system dependencies, and streams the finished environment out to a compressed container backup file:
+Executing the script with no parameters automatically triggers a full compilation: it builds the core host Snap, packs the chiseled OCI Rock bundle, configures base system dependencies, and streams the finished environment out to a compressed container backup file for LXD.  If you do not flag a specific version of Gaia, you will be prompted for it when the script runs:
 ```bash
 ./rebuild.sh
+```
+or for automated pipelines you can specify the Gaia version to package as a flag:
+```bash
+./rebuild.sh --gaia-version=0.21.0
 ```
 
 ### Run Targeted Module Rebuilds

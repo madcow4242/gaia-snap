@@ -2,11 +2,6 @@
 # =====================================================================
 # GAIA WORKSTATION DEEP CLEANUP & FILE SYSTEM OPTIMIZATION ENGINE
 # =====================================================================
-# Target: Safely reclaim hundreds of gigabytes of hidden caches,
-# orphaned compiler layers, and stale logs while preserving production
-# artifacts (*.snap, *.rock, *LXD-sandbox.tar.gz).
-# =====================================================================
-
 set -e
 
 # Ensure the execution frame is running with root access privileges
@@ -18,26 +13,43 @@ fi
 
 INITIAL_SPACE=$(df -h / | awk 'NR==2 {print $4}')
 echo "====================================================================="
-echo "🧽 INITIALIZING SYSTEMIC RECLAIM SWEEP (Starting Free Space: $INITIAL_SPACE)"
+echo "🧹 INITIALIZING SYSTEMIC RECLAIM SWEEP (Starting Free Space: $INITIAL_SPACE)"
 echo "====================================================================="
 
+# Read incoming argument $1, default to 0.20.0 if empty
+TARGET_VERSION="${1:-0.20.0}"
+
 # ---------------------------------------------------------------------
-# PHASE 1: FORCE EVICT ACTIVE/ORPHANED BUILD WORKERS
+# PHASE 1: FORCE EVICT ACTIVE/ORPHANED BUILD WORKERS & LEGACY IMAGES
 # ---------------------------------------------------------------------
 echo "LOG: Terminating active and orphaned build worker instances..."
 if command -v lxc &> /dev/null; then
+    # Evict worker container instances
     lxc delete gaia-worker --force >/dev/null 2>&1 || true
+    lxc delete gaia-runtime-sandbox --force >/dev/null 2>&1 || true
+
+    # FIX: Corrected variable format interpolation string mapping
+    lxc image delete "gaia-desktop/0.20.0${TARGET_VERSION}" >/dev/null 2>&1 || true
+
+    # NEW: Surgical eviction of any lingering legacy namespaced images
+    lxc image delete "amd-gaia/${TARGET_VERSION}" >/dev/null 2>&1 || true
     lxc image delete "amd-gaia/0.20.0" >/dev/null 2>&1 || true
 fi
 
 # ---------------------------------------------------------------------
-# PHASE 2: PURGE HIDDEN SNAPCONTAINER/ROCKCONTAINER REPOS & ARCHIVES
+# PHASE 2: PURGE HIDDEN SNAPCONTAINER/ROCKCONTAINER REPOS & USER CACHES
 # ---------------------------------------------------------------------
 echo "LOG: Wiping untracked staging archives from system partitions..."
 rm -rf /var/tmp/gaia-*
 rm -rf /home/*/.local/share/Trash/files/*
 
-# Clean out specific user-space snap staging directories if present
+# NEW: Vacuum hidden tool downloader caches out of all local home directories
+echo "LOG: Evicting hidden user-space build tool manager caches..."
+rm -rf /home/*/.cache/snapcraft
+rm -rf /home/*/.cache/rockcraft
+rm -rf /root/.cache/snapcraft
+rm -rf /root/.cache/rockcraft
+
 for user_home in /home/*; do
     if [ -d "${user_home}/snap/docker/common" ]; then
         echo "LOG: Clearing staging ground layers inside user workspace: ${user_home}"
@@ -51,27 +63,22 @@ done
 if command -v lxc &> /dev/null; then
     echo "LOG: Deep scanning hidden hypervisor project namespaces..."
 
-    # Force isolate and prune orphaned elements within hidden compiler namespaces
     for proj in "snapcraft" "rockcraft"; do
         if lxc project list --format csv | grep -q "^${proj},"; then
             echo "LOG: Purging unreferenced build infrastructure inside project space [${proj}]..."
 
-            # Delete any hidden, trailing build containers
             for inst in $(lxc list --project "$proj" -c n --format csv 2>/dev/null); do
                 lxc delete --project "$proj" "$inst" --force >/dev/null 2>&1 || true
             done
 
-            # Prune loose image layers blocking storage blocks
             lxc image prune --project "$proj" --force >/dev/null 2>&1 || true
         fi
     done
 
-    # General pool image garbage collection sweep across all remaining profiles
     for proj in $(lxc project list --format csv | awk -F, '{print $1}'); do
         lxc image prune --project "$proj" --force >/dev/null 2>&1 || true
     done
 
-    # Force system paths directory cleanup for uncknowledged block drivers
     echo "LOG: Evicting unlinked raw hypervisor caching directories..."
     rm -rf /var/snap/lxd/common/lxd/storage-pools/default/images/snapcraft
     rm -rf /var/snap/lxd/common/lxd/storage-pools/default/containers/snapcraft
@@ -82,7 +89,7 @@ if command -v lxc &> /dev/null; then
 fi
 
 # ---------------------------------------------------------------------
-# PHASE 4: RECLAIM CONFINED SYSTEM DAEMONhead CLONE HeadROOM
+# PHASE 4: RECLAIM CONFINED SYSTEM DAEMON CLONE HEADROOM
 # ---------------------------------------------------------------------
 echo "LOG: Evicting disabled duplicate revisions from the Snapd database..."
 snap list --all | awk '/disabled/{print $1, $3}' | while read snapname revision; do
@@ -92,7 +99,6 @@ snap list --all | awk '/disabled/{print $1, $3}' | while read snapname revision;
     fi
 done
 
-# Clear system-wide package downloader caches
 echo "LOG: Vacuuming operating system package manager storage archives..."
 apt-get autoremove -y >/dev/null 2>&1
 apt-get clean -y >/dev/null 2>&1
@@ -102,23 +108,22 @@ apt-get clean -y >/dev/null 2>&1
 # ---------------------------------------------------------------------
 if command -v docker &> /dev/null; then
     echo "LOG: Running deep garbage collection pass across Docker build engines..."
-    # Only purges dangling/unreferenced build caches and unused system layers.
-    # Leaves your running active Ollama volumes safely intact.
     docker builder prune -f >/dev/null 2>&1 || true
     docker image prune -f >/dev/null 2>&1 || true
+    # NEW: Wipe dangling microservices layers but preserve active databases
+    docker system prune -f >/dev/null 2>&1 || true
 fi
 
 # ---------------------------------------------------------------------
 # PHASE 6: HARDWARE CONCURRENCY FILE ALLOCATION SYNC
 # ---------------------------------------------------------------------
 echo "LOG: Signaling system kernel to commit deleted blocks to flash sectors..."
-# Flushes memory maps and recalculates true available allocation space blocks on disk
 sync
 sleep 2
 
 FINAL_SPACE=$(df -h / | awk 'NR==2 {print $4}')
 echo "====================================================================="
-echo "✨ SYSTEM DEEP CLEANUP PIPELINE PASS COMPLETE!"
+echo "🎉 SYSTEM DEEP CLEANUP PIPELINE PASS COMPLETE!"
 echo "---------------------------------------------------------------------"
 echo " Initial Headroom:   $INITIAL_SPACE"
 echo " Current Headroom:   $FINAL_SPACE"
