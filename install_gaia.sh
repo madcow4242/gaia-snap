@@ -6,6 +6,9 @@ set -e
 # =====================================================================
 GAIA_VERSION="0.20.0"  # Centralized single source of truth for installations
 
+# Capture the absolute path of the directory where the script is located
+WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # =====================================================================
 # PHASE 1: FRONTLOADED USER INTERACTIVE DATA COLLECTION
 # =====================================================================
@@ -17,11 +20,12 @@ echo "====================================================================="
 echo " Select your target deployment topology execution framework:"
 echo "    1) Native Ubuntu Desktop Application (Snap Layer)"
 echo "    2) Secure Isolated System Container Sandbox (LXD Engine)"
-echo "    3) Bare Application Process Container (Docker Engine)"
-echo "    4) Rootless Application Process Container (Podman Engine) [Roadmap]"
+echo "    3) Dedicated Standalone Desktop Sandbox (Docker Engine)"
+echo "    4) Rootless OCI Process Container Sandbox (Podman Engine)"
+echo "    5) Enterprise Production Orchestration Blueprint (Kubernetes Core)"
 echo "---------------------------------------------------------------------"
 
-read -p " Enter Choice (1-4): " TOPOLOGY_CHOICE
+read -p " Enter Choice (1-5): " TOPOLOGY_CHOICE
 
 # Prompt common configuration settings
 read -p " Enter your Lemonade/AI Backend URL [http://127.0.0.1:13305]: " BACKEND_URL
@@ -36,7 +40,6 @@ read -p " Enter Groq API Key (Optional / Leave Blank): " GROQ_KEY
 read -p " Enter Tavily Search API Key (Optional / Leave Blank): " TAVILY_KEY
 read -p " Enter Serper Search API Key (Optional / Leave Blank): " SERPER_KEY
 
-# Handle Expose Directory Parameter for Choice 2, 3, and 4 immediately while user is present
 EXPOSE_HOST_DIR="n"
 HOST_PATH_TO_EXPOSE=""
 if [[ "$TOPOLOGY_CHOICE" =~ ^(2|3|4)$ ]]; then
@@ -44,14 +47,46 @@ if [[ "$TOPOLOGY_CHOICE" =~ ^(2|3|4)$ ]]; then
     echo " The container sandbox is isolated from your host filesystem."
     read -p " Expose a host directory to the sandboxed GAIA environment? (y/N): " EXPOSE_HOST_DIR
     if [[ "$EXPOSE_HOST_DIR" =~ ^[Yy]$ ]]; then
-        read -p " Enter absolute host path to expose (e.g., /home/kevin/Workspace): " HOST_PATH_TO_EXPOSE
+        read -p " Enter absolute host path to expose (e.g., /home/your_user/Workspace): " HOST_PATH_TO_EXPOSE
     fi
 fi
 
-# Locate local artifacts universally using wildcard patterns
-SNAP_PACKAGE=$(ls *.snap 2>/dev/null | head -n 1 || true)
-LXD_TARBALL=$(ls *LXD-sandbox.tar.gz 2>/dev/null | head -n 1 || true)
-ROCK_PACKAGE=$(ls *.rock 2>/dev/null | head -n 1 || true)
+# =====================================================================
+# 🎯 INTELLIGENT WORKSPACE MOUNT DETECTION & STAGING ENGINE
+# =====================================================================
+IS_REMOTE_MOUNT=false
+LOCAL_TAR_STAGE=""
+
+# Detect if the workspace directory is parked on a network mount
+if [[ "$WORKSPACE_DIR" == /mnt/userver* ]]; then
+    echo "---------------------------------------------------------------------"
+    echo "💡 DETECTED: Script running inside a remote network mount partition."
+    echo "             Activating isolated local asset caching layer..."
+    echo "---------------------------------------------------------------------"
+    IS_REMOTE_MOUNT=true
+    LOCAL_TAR_STAGE="/tmp/gaia-desktop_${GAIA_VERSION}_docker-image.tar"
+
+    # Pre-flight scp transfer onto your Zenbook's native local SSD storage
+    if [[ "$TOPOLOGY_CHOICE" =~ ^(3|4)$ ]]; then
+        if [ ! -f "$LOCAL_TAR_STAGE" ]; then
+            echo "LOG: Fetching large deployment archive securely over network link..."
+            scp kevin@userver:/mnt/md0/backups/SoftwareDev/gaia-snap/gaia-desktop_${GAIA_VERSION}_docker-image.tar "$LOCAL_TAR_STAGE"
+        else
+            echo "LOG: Utilizing existing local target cache: $LOCAL_TAR_STAGE"
+        fi
+    fi
+fi
+
+# Locate local artifacts cleanly within the absolute workspace context
+SNAP_PACKAGE=$(ls "${WORKSPACE_DIR}"/*.snap 2>/dev/null | head -n 1 || true)
+LXD_TARBALL=$(ls "${WORKSPACE_DIR}"/*LXD-sandbox.tar.gz 2>/dev/null | head -n 1 || true)
+
+# Resolve target container pathing based on current topology placement
+if [ "$IS_REMOTE_MOUNT" = true ]; then
+    DOCKER_TARBALL="$LOCAL_TAR_STAGE"
+else
+    DOCKER_TARBALL=$(ls "${WORKSPACE_DIR}"/*docker-image.tar 2>/dev/null | head -n 1 || true)
+fi
 
 # =====================================================================
 # PHASE 2: ATOMIC TOPOLOGY CONFIGURATION MACHINE EXECUTION
@@ -61,121 +96,69 @@ ROCK_PACKAGE=$(ls *.rock 2>/dev/null | head -n 1 || true)
 # OPTION 1: NATIVE DESKTOP SNAP ENVIRONMENT DEPLOYMENT
 # ---------------------------------------------------------------------
 if [[ "$TOPOLOGY_CHOICE" == "1" ]]; then
-    echo "====================================================================="
-    echo " LOG: Initializing Native Ubuntu Desktop Snap Layer Installation..."
-    echo "====================================================================="
-
+    echo "LOG: Initializing Native Ubuntu Desktop Snap Layer Installation..."
     if [ -z "$SNAP_PACKAGE" ]; then
         echo "❌ ERROR: No local .snap artifact found in the working directory."
-        echo "Please execute your compilation script first or fetch a signed build."
         exit 1
     fi
-
-    echo "LOG: Detected snap artifact '$SNAP_PACKAGE'. Installing with dangerous flags..."
     sudo snap install "$SNAP_PACKAGE" --dangerous --classic
-
-    echo "LOG: Synchronizing native Snap configuration parameters database..."
-    sudo snap set gaia-desktop backend.url="$BACKEND_URL"
-    sudo snap set gaia-desktop backend.maxsteps="$AGENT_STEPS"
-    sudo snap set gaia-desktop keys.openai="$OPENAI_KEY"
-    sudo snap set gaia-desktop keys.anthropic="$ANTHROPIC_KEY"
-    sudo snap set gaia-desktop keys.groq="$GROQ_KEY"
-    sudo snap set gaia-desktop keys.tavily="$TAVILY_KEY"
-    sudo snap set gaia-desktop keys.serper="$SERPER_KEY"
-
-    echo "====================================================================="
-    echo " ✨ SUCCESS: GAIA Snap Topology Installed Successfully!"
-    echo "====================================================================="
+    sudo snap set gaia-desktop backend.url="$BACKEND_URL" backend.maxsteps="$AGENT_STEPS" keys.openai="$OPENAI_KEY" keys.anthropic="$ANTHROPIC_KEY" keys.groq="$GROQ_KEY" keys.tavily="$TAVILY_KEY" keys.serper="$SERPER_KEY"
+    echo "✨ SUCCESS: GAIA Snap Topology Installed Successfully!"
 
 # ---------------------------------------------------------------------
-# OPTION 2: SECURE ISOLATED SYSTEM CONTAINER SANDBOX (LXD ENGINE)
+# OPTION 2: SECURE ISOLATED LXD SANDBOX SYSTEM CONTAINER
 # ---------------------------------------------------------------------
 elif [[ "$TOPOLOGY_CHOICE" == "2" ]]; then
-    echo "====================================================================="
-    echo " LOG: Deploying Secure Isolated LXD Sandbox System Container..."
-    echo "====================================================================="
-
-    # 1. Verify local LXD subsystem availability
+    echo "LOG: Deploying Secure Isolated LXD Sandbox System Container..."
     if ! command -v lxc &> /dev/null; then
-        echo "❌ ERROR: LXD command line interface tool not found on this system."
-        echo "Please configure your host via: sudo snap install lxd && sudo lxd init --auto"
+        echo "❌ ERROR: LXD CLI utility not found on this system."
         exit 1
     fi
 
-    # 2. Process container image validations & incremental timestamp upgrades
     if [ -z "${LXD_TARBALL}" ]; then
         if ! lxc info gaia-runtime-sandbox >/dev/null 2>&1; then
-            echo "❌ ERROR: Portable archive 'gaia-desktop_${GAIA_VERSION}_LXD-sandbox.tar.gz' not found in workspace."
-            echo "Please place the pre-baked tarball artifact here or compile it using: ./rebuild.sh --snap --lxd"
+            echo "❌ ERROR: Portable archive 'gaia-desktop_${GAIA_VERSION}_LXD-sandbox.tar.gz' not found."
             exit 1
         fi
-        echo "LOG: Running deployment from existing pre-registered container instance block."
     else
-        FILE_M_TIME=$(stat -c %Y "./${LXD_TARBALL}")
+        FILE_M_TIME=$(stat -c %Y "${LXD_TARBALL}")
         LAST_M_TIME=$(cat ~/.gaia/.sandbox_timestamp 2>/dev/null || echo "0")
-
-        # Evict existing instance if a fresh container tarball is dropped into the directory
         if lxc info gaia-runtime-sandbox >/dev/null 2>&1 && [ "${FILE_M_TIME}" != "${LAST_M_TIME}" ]; then
-            echo "LOG: 🔄 Detected a fresh update to ./${LXD_TARBALL}. Evicting stale container instance..."
             lxc delete gaia-runtime-sandbox --force >/dev/null 2>&1 || true
         fi
-
-        # Materialize container layout directly from backup stream if not present
         if ! lxc info gaia-runtime-sandbox >/dev/null 2>&1; then
-            echo "LOG: Materializing container instance from compressed standalone backup: ./${LXD_TARBALL}"
-            lxc import "./${LXD_TARBALL}" gaia-runtime-sandbox
-            mkdir -p ~/.gaia/
-            echo "${FILE_M_TIME}" > ~/.gaia/.sandbox_timestamp || true
-            echo "LOG: Sandbox container infrastructure imported successfully."
+            lxc import "${LXD_TARBALL}" gaia-runtime-sandbox
+            mkdir -p ~/.gaia/ && echo "${FILE_M_TIME}" > ~/.gaia/.sandbox_timestamp || true
         fi
     fi
 
-    # 3. Boot the standalone sandbox instance container cleanly
-    echo "LOG: Booting up the standalone sandbox instance container..."
     lxc start gaia-runtime-sandbox || true
     sleep 2
 
-    # 4. Handle dynamic host directory pass-through mapping
     RESOLVED_HOST_PATH=""
     if [ -n "$HOST_PATH_TO_EXPOSE" ]; then
         eval RESOLVED_HOST_PATH="$HOST_PATH_TO_EXPOSE"
-
         if [ -d "$RESOLVED_HOST_PATH" ]; then
-            echo "LOG: Mirroring absolute host path structural blueprint '$RESOLVED_HOST_PATH' into sandbox..."
-
-            # Wipe out old structural disk maps to prevent device naming conflicts
             lxc config device remove gaia-runtime-sandbox host-workspace >/dev/null 2>&1 || true
-
-            # Materialize path blueprints natively inside container namespace
             lxc exec gaia-runtime-sandbox -- mkdir -p "$RESOLVED_HOST_PATH"
             lxc config device add gaia-runtime-sandbox host-workspace disk source="$RESOLVED_HOST_PATH" path="$RESOLVED_HOST_PATH"
             lxc config set gaia-runtime-sandbox raw.idmap "both 1000 1000"
-
-            echo "LOG: Rebooting sandbox engine to settle kernel space maps..."
-            lxc restart gaia-runtime-sandbox
-            sleep 3
-        else
-            echo "⚠️ WARNING: Provided host path '$RESOLVED_HOST_PATH' does not exist. Skipping custom mirror mapping."
-            RESOLVED_HOST_PATH=""
         fi
     fi
 
-    # 5. Authorize loopback graphical transactions on local X server
+    echo "LOG: Mapping local host display socket channels directly into container frame..."
     xhost +local: >/dev/null 2>&1 || true
+    lxc config device remove gaia-runtime-sandbox X11-Display-Socket >/dev/null 2>&1 || true
+    sudo mkdir -p /tmp/.X11-unix && sudo chmod 1777 /tmp/.X11-unix
+    lxc config device add gaia-runtime-sandbox X11-Display-Socket disk source=/tmp/.X11-unix path=/tmp/.X11-unix
 
-    # 6. Synchronize configuration keys directly into internal Snap database
-    echo "LOG: Populating native nested Snap configuration engine database..."
-    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop backend.url="$BACKEND_URL"
-    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop backend.maxsteps="$AGENT_STEPS"
-    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop keys.openai="$OPENAI_KEY"
-    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop keys.anthropic="$ANTHROPIC_KEY"
-    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop keys.groq="$GROQ_KEY"
-    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop keys.tavily="$TAVILY_KEY"
-    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop keys.serper="$SERPER_KEY"
+    echo "LOG: Settling container subsystems..."
+    lxc restart gaia-runtime-sandbox
+    sleep 3
 
-    # 7. Provision paths validation cache JSON to satisfy internal security policies
+    lxc exec gaia-runtime-sandbox -- snap set gaia-desktop backend.url="$BACKEND_URL" backend.maxsteps="$AGENT_STEPS" keys.openai="$OPENAI_KEY" keys.anthropic="$ANTHROPIC_KEY" keys.groq="$GROQ_KEY" keys.tavily="$TAVILY_KEY" keys.serper="$SERPER_KEY"
+
     if [ -n "$RESOLVED_HOST_PATH" ]; then
-        echo "LOG: Provisioning application-level security path cache exceptions..."
         lxc exec gaia-runtime-sandbox -- mkdir -p /root/.gaia/cache
         lxc exec gaia-runtime-sandbox -- sh -c "cat << 'EOF' > /root/.gaia/cache/allowed_paths.json
 {
@@ -187,137 +170,209 @@ elif [[ "$TOPOLOGY_CHOICE" == "2" ]]; then
 EOF"
     fi
 
-    echo "LOG: All infrastructure synchronized successfully!"
     echo "=========================================================================="
-    echo "🚀 BOOTING GAIA WORKSTATION PORTABLY VIA LXD CONTAINER SANDBOX"
+    echo "🚀 BOOTING GAIA WORKSTATION VIA LXD CONTAINER SANDBOX"
     echo "=========================================================================="
-
-    # 8. Start the execution app interface with environment parameters
     lxc exec gaia-runtime-sandbox -- env \
-        DISPLAY=:0 \
+        DISPLAY="${DISPLAY:-:0}" \
+        WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+        XDG_RUNTIME_DIR="/tmp" \
         ALLOWED_PATHS="${RESOLVED_HOST_PATH}" \
         allowed_paths="${RESOLVED_HOST_PATH}" \
         GAIA_ALLOWED_PATHS="${RESOLVED_HOST_PATH}" \
         /snap/bin/gaia-desktop --no-sandbox
 
 # ---------------------------------------------------------------------
-# OPTION 3: BARE APPLICATION PROCESS CONTAINER (DOCKER ENGINE)
+# OPTION 3: DEDICATED STANDALONE DESKTOP SANDBOX (DOCKER ENGINE)
 # ---------------------------------------------------------------------
 elif [[ "$TOPOLOGY_CHOICE" == "3" ]]; then
     echo "====================================================================="
-    echo " LOG: Deploying Bare Application Process Container (Docker Engine)..."
+    echo " LOG: Deploying Chiseled OCI Rock via Docker Engine..."
     echo "====================================================================="
-
-    # 1. Verify local Docker engine availability
     if ! command -v docker &> /dev/null; then
-        echo "❌ ERROR: Docker command line interface tool not found on this system."
-        echo "Please configure your host engine before executing this topology."
+        echo "❌ ERROR: Docker CLI engine tool not found on this system."
         exit 1
     fi
 
-    # 2. Verify local OCI Rock artifact presence
-    if [ -z "$ROCK_PACKAGE" ]; then
-        echo "❌ ERROR: No local OCI .rock package found in the working directory."
-        echo "Please run: ./rebuild.sh --oci  first to build your target container core."
+    if [ -n "${DOCKER_TARBALL}" ]; then
+        if [ "$IS_REMOTE_MOUNT" = false ]; then
+            echo "LOG: Streaming archive directly onto local storage partition via rsync..."
+            rsync -ah --progress "${DOCKER_TARBALL}" /tmp/gaia-docker-stage.tar
+            LOCAL_STAGE_FILE="/tmp/gaia-docker-stage.tar"
+        else
+            LOCAL_STAGE_FILE="$DOCKER_TARBALL"
+        fi
+
+        echo "LOG: Loading native structural OCI-transposed archive image layout via socket pipe..."
+        cat "$LOCAL_STAGE_FILE" | docker load
+
+        # Keep things clean on your laptop's local partition
+        [ "$IS_REMOTE_MOUNT" = false ] && rm -f /tmp/gaia-docker-stage.tar
+    fi
+
+    if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^gaia-desktop:${GAIA_VERSION}$"; then
+        echo "❌ ERROR: Image gaia-desktop:${GAIA_VERSION} was not registered inside your local daemon."
         exit 1
     fi
 
-    # 3. FIX: Convert and pipe the OCI-Archive Rock cleanly into Docker's backend
-    echo "LOG: Converting OCI transport layer archive and loading into Docker daemon..."
-    if command -v rockcraft.skopeo &> /dev/null; then
-        sudo rockcraft.skopeo --insecure-policy copy \
-            "oci-archive:$(realpath ./${ROCK_PACKAGE})" \
-            "docker-daemon:gaia-desktop:${GAIA_VERSION}"
-    elif command -v skopeo &> /dev/null; then
-        sudo skopeo --insecure-policy copy \
-            "oci-archive:$(realpath ./${ROCK_PACKAGE})" \
-            "docker-daemon:gaia-desktop:${GAIA_VERSION}"
-    else
-        echo "❌ ERROR: Transport bridge engine ('skopeo' or 'rockcraft.skopeo') not found."
-        echo "Please ensure rockcraft is installed via: sudo snap install rockcraft --classic"
-        exit 1
-    fi
+    docker rm -f gaia-docker-sandbox >/dev/null 2>&1 || true
 
-    # 4. Evict any previous existing stale containers tracking the same name
-    if docker ps -a --format '{{.Names}}' | grep -q "^gaia-docker-sandbox$"; then
-        echo "LOG: Evicting stale runtime container instance layout..."
-        docker rm -f gaia-docker-sandbox >/dev/null 2>&1 || true
-    fi
-
-    # 5. Dynamic Host Compositor Engine Detection (Wayland vs X11 Display Routing)
-    DISPLAY_FLAGS=""
-    XHOST_AUTH=""
-
+    DISPLAY_FLAGS="-e DISPLAY=$DISPLAY"
     if [ -n "$WAYLAND_DISPLAY" ]; then
-        echo "LOG: Wayland display server environment detected (${WAYLAND_DISPLAY}). Applying secure socket routing..."
-
-        # 1. Map the Wayland socket exposure arguments
-        DISPLAY_FLAGS="-e DISPLAY=$DISPLAY \
-                       -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY \
-                       -e XDG_RUNTIME_DIR=/tmp \
-                       -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY:ro"
-
-        # 2. Extract local authorization tokens for rootless/privileged graphical handshakes
-        if command -v xhost &> /dev/null; then
-            xhost +local: >/dev/null 2>&1 || true
-        fi
+        DISPLAY_FLAGS="-e DISPLAY=$DISPLAY -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY -e XDG_RUNTIME_DIR=/tmp -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY:ro"
     else
-        echo "LOG: Traditional X11 display server environment detected (${DISPLAY}). Applying Unix socket routing..."
-
-        # Ensure the fallback directory physically exists on the host to prevent Docker mount crashes
         sudo mkdir -p /tmp/.X11-unix && sudo chmod 1777 /tmp/.X11-unix
-
-        DISPLAY_FLAGS="-e DISPLAY=$DISPLAY \
-                       -v /tmp/.X11-unix:/tmp/.X11-unix:ro"
-
-        if command -v xhost &> /dev/null; then
-            xhost +local: >/dev/null 2>&1 || true
-        fi
+        DISPLAY_FLAGS="-e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix:ro"
     fi
+    xhost +local:docker >/dev/null 2>&1 || true
 
-    # 6. Parse dynamic directory volumes array strings
     VOLUME_MAPPING=""
-    RESOLVED_HOST_PATH=""
-    if [ -n "$HOST_PATH_TO_EXPOSE" ]; then
-        eval RESOLVED_HOST_PATH="$HOST_PATH_TO_EXPOSE"
-        if [ -d "$RESOLVED_HOST_PATH" ]; then
-            echo "LOG: Mapping host directory point to container frame: $RESOLVED_HOST_PATH"
-            VOLUME_MAPPING="-v $RESOLVED_HOST_PATH:$RESOLVED_HOST_PATH"
-        fi
-    fi
+    [ -n "$HOST_PATH_TO_EXPOSE" ] && eval RESOLVED_HOST_PATH="$HOST_PATH_TO_EXPOSE"
+    [ -d "$RESOLVED_HOST_PATH" ] && VOLUME_MAPPING="-v $RESOLVED_HOST_PATH:$RESOLVED_HOST_PATH"
 
     echo "=========================================================================="
     echo " 🚀 BOOTING GAIA DESKTOP APPLICATION VIA DOCKER PROCESS SANDBOX"
     echo "=========================================================================="
+    xhost +local:docker
 
-    # 7. Execute the container instance with full dynamic UI pass-through parameters
-    docker run -d \
+    eval "docker run -d \
         --name gaia-docker-sandbox \
         --net=host \
         --ipc=host \
+        --user $(id -u):$(id -g) \
         --device /dev/dri:/dev/dri \
         $DISPLAY_FLAGS \
         $VOLUME_MAPPING \
-        -e backend__url="$BACKEND_URL" \
-        -e backend__maxsteps="$AGENT_STEPS" \
-        -e keys__openai="$OPENAI_KEY" \
-        -e keys__anthropic="$ANTHROPIC_KEY" \
-        -e keys__groq="$GROQ_KEY" \
-        -e keys__tavily="$TAVILY_KEY" \
-        -e keys__serper="$SERPER_KEY" \
-        -e GAIA_ALLOWED_PATHS="${RESOLVED_HOST_PATH}" \
-        --restart unless-stopped \
-        "gaia-desktop:${GAIA_VERSION}"
+        -e SNAP=\"/opt/gaia_runtime\" \
+        -e TARGET_EXEC=\"/opt/gaia_runtime/opt/GAIA/gaia-desktop\" \
+        -e HOME=\"/opt/gaia_runtime/workspace\" \
+        -e GAIA_HOME=\"/opt/gaia_runtime/workspace/.gaia\" \
+        -e TMPDIR=\"/opt/gaia_runtime/workspace/tmp\" \
+        -e DISPLAY=\"$DISPLAY\" \
+        -e WAYLAND_DISPLAY=\"$WAYLAND_DISPLAY\" \
+        -e backend_url=\"$BACKEND_URL\" \
+        -e backend_maxsteps=\"$AGENT_STEPS\" \
+        -e keys_openai=\"$OPENAI_KEY\" \
+        -e keys_anthropic=\"$ANTHROPIC_KEY\" \
+        -e keys_groq=\"$GROQ_KEY\" \
+        -e keys_tavily=\"$TAVILY_KEY\" \
+        -e keys_serper=\"$SERPER_KEY\" \
+        -e GAIA_ALLOWED_PATHS=\"${RESOLVED_HOST_PATH}\" \
+        'gaia-desktop:${GAIA_VERSION}'"
 
-    echo "🎉 SUCCESS: GAIA Docker Sandbox Container Launched in Background!"
-    echo "Container Name: gaia-docker-sandbox"
-    echo "To inspect execution logs, type: docker logs -f gaia-docker-sandbox"
-    echo "=========================================================================="
+    echo "🎉 SUCCESS: Chiseled OCI Rock deployed via Docker process containment!"
 
+# ---------------------------------------------------------------------
+# OPTION 4: ROOTLESS APPLICATION PROCESS CONTAINER (PODMAN ENGINE)
+# ---------------------------------------------------------------------
 elif [[ "$TOPOLOGY_CHOICE" == "4" ]]; then
-    echo "LOG: Podman topology blueprint selected. Current state: Under construction."
-    exit 0
-else
-    echo "❌ ERROR: Invalid choice selected ($TOPOLOGY_CHOICE). Exiting execution frame."
-    exit 1
+    echo "LOG: Deploying Rootless OCI Process Container Sandbox via Podman Engine..."
+    if ! command -v podman &> /dev/null; then
+        echo "❌ ERROR: Podman engine execution footprint not detected."
+        exit 1
+    fi
+
+    if [ -n "${DOCKER_TARBALL}" ]; then
+        if [ "$IS_REMOTE_MOUNT" = false ]; then
+            echo "LOG: Streaming archive directly onto local storage partition via rsync..."
+            rsync -ah --progress "${DOCKER_TARBALL}" /tmp/gaia-podman-stage.tar
+            LOCAL_STAGE_FILE="/tmp/gaia-podman-stage.tar"
+        else
+            LOCAL_STAGE_FILE="$DOCKER_TARBALL"
+        fi
+
+        echo "LOG: Unpacking OCI-archive image structures natively via socket pipe..."
+        cat "$LOCAL_STAGE_FILE" | podman load
+
+        [ "$IS_REMOTE_MOUNT" = false ] && rm -f /tmp/gaia-podman-stage.tar
+    fi
+
+    podman rm -f gaia-podman-sandbox >/dev/null 2>&1 || true
+    xhost +local:root >/dev/null 2>&1 || true
+
+    VOLUME_MAPPING=""
+    [ -n "$HOST_PATH_TO_EXPOSE" ] && eval RESOLVED_HOST_PATH="$HOST_PATH_TO_EXPOSE"
+    [ -d "$RESOLVED_HOST_PATH" ] && VOLUME_MAPPING="-v $RESOLVED_HOST_PATH:$RESOLVED_HOST_PATH:Z"
+
+    eval "podman run -d \
+        --name gaia-podman-sandbox \
+        --net=host \
+        --ipc=host \
+        --security-opt label=disable \
+        -e DISPLAY=$DISPLAY \
+        -v /tmp/.X11-unix:/tmp/.X11-unix:ro \
+        $VOLUME_MAPPING \
+        -e backend_url=\"$BACKEND_URL\" \
+        -e backend_maxsteps=\"$AGENT_STEPS\" \
+        -e keys_openai=\"$OPENAI_KEY\" \
+        -e keys_anthropic=\"$ANTHROPIC_KEY\" \
+        -e keys_groq=\"$GROQ_KEY\" \
+        -e keys_tavily=\"$TAVILY_KEY\" \
+        -e keys_serper=\"$SERPER_KEY\" \
+        'gaia-desktop:${GAIA_VERSION}'"
+
+    echo "🎉 SUCCESS: OCI Rock deployed via Podman cleanly!"
+
+# ---------------------------------------------------------------------
+# OPTION 5: ENTERPRISE PRODUCTION ORCHESTRATION BLUEPRINT (KUBERNETES)
+# ---------------------------------------------------------------------
+elif [[ "$TOPOLOGY_CHOICE" == "5" ]]; then
+    echo "====================================================================="
+    echo " 🚀 KUBERNETES DEPLOYMENT MANIFEST ENGINE MANIFEST"
+    echo "====================================================================="
+    echo "To deploy your chiseled OCI Rock into Kubernetes, apply the manifest below."
+    echo "Ensure you tag and push your image to your cluster's private container registry:"
+    echo "   docker tag gaia-desktop:${GAIA_VERSION} internal-registry.local/gaia-desktop:${GAIA_VERSION}"
+    echo "   docker push internal-registry.local/gaia-desktop:${GAIA_VERSION}"
+    echo "---------------------------------------------------------------------"
+
+    cat << EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gaia-desktop-deployment
+  labels:
+    app: gaia-desktop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gaia-desktop
+  template:
+    metadata:
+      labels:
+        app: gaia-desktop
+    spec:
+      hostNetwork: true
+      containers:
+      - name: gaia-desktop
+        image: internal-registry.local/gaia-desktop:${GAIA_VERSION}
+        securityContext:
+          privileged: true
+        env:
+        - name: DISPLAY
+          value: "${DISPLAY}"
+        - name: backend_url
+          value: "${BACKEND_URL}"
+        - name: backend_maxsteps
+          value: "${AGENT_STEPS}"
+        - name: keys_openai
+          value: "${OPENAI_KEY}"
+        - name: keys_anthropic
+          value: "${ANTHROPIC_KEY}"
+        - name: keys_groq
+          value: "${GROQ_KEY}"
+        - name: keys_tavily
+          value: "${TAVILY_KEY}"
+        - name: keys_serper
+          value: "${SERPER_KEY}"
+        volumeMounts:
+        - name: x11-socket
+          mountPath: /tmp/.X11-unix
+      volumes:
+      - name: x11-socket
+        hostPath:
+          path: /tmp/.X11-unix
+EOF
+    echo "====================================================================="
 fi

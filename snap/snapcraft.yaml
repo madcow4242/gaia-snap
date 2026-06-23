@@ -102,7 +102,7 @@ parts:
   # PART 3: Sideload configuration launcher and operational hooks
   gaia-sideloads:
     plugin: dump
-    source: src_sideloads  # ◄--- FIXED: Points ONLY to our clean isolated sub-folder!
+    source: .
     stage:
       - bin/gaia-launcher.sh
       - lib/python_patches/sitecustomize.py
@@ -111,6 +111,13 @@ parts:
       - bin/gaia-launcher.sh
       - lib/python_patches/sitecustomize.py
       - snap/hooks/configure
+      - -*.snap
+      - -*.tar
+      - -*.tar.gz
+      - -*.rock
+      - -*.md
+      - -*.txt
+      - -LICENSE
     override-build: |
       echo "LOG: Setting up local sideload folder structures inside build isolation container..."
        
