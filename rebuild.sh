@@ -56,7 +56,7 @@ validate_required_tools() {
 validate_version_format() {
     if ! [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "ERROR: Invalid version format: $1"
-        echo "   Version must be in semantic versioning format (e.g., 0.20.0)"
+        echo "   Version must be in semantic versioning format (e.g., 0.21.2)"
         exit 1
     fi
 }
@@ -76,7 +76,7 @@ powerprofilesctl set power-saver
 # =====================================================================
 # GLOBAL WORKSPACE VARIABLE DEFINITIONS
 # =====================================================================
-GLOBAL_DEFAULT_VERSION="0.20.0"
+GLOBAL_DEFAULT_VERSION="0.21.2"
 
 VERSION_CACHE_FILE=".last_version"
 GAIA_VERSION=""
@@ -134,8 +134,7 @@ patch_file() {
 patch_file "snap/snapcraft.yaml" "VERSION_TAG=\".*\"" "VERSION_TAG=\"$GAIA_VERSION\"" "target version"
 patch_file "rockcraft.yaml" "version: &global_version \".*\"" "version: \&global_version \"$GAIA_VERSION\"" "anchor version"
 patch_file "install_gaia.sh" "GAIA_VERSION=\".*\"" "GAIA_VERSION=\"$GAIA_VERSION\"" "target release"
-patch_file "README.md" "GAIA Version:\*\* Current version: [0-9.]*" "GAIA Version:\*\* Current version: $GAIA_VERSION" "documentation header"
-patch_file "README.md" "gaia-desktop_[0-9.]*_LXD-sandbox\.tar\.gz" "gaia-desktop_${GAIA_VERSION}_LXD-sandbox.tar.gz" "asset naming layout"
+patch_file "README.md" "Current default GAIA version in rebuild.sh: [0-9.]*" "Current default GAIA version in rebuild.sh: $GAIA_VERSION" "documentation header"
 patch_file "gaia-launcher.sh" "version\": \".*\"" "version\": \"$GAIA_VERSION\"" "launcher json version"
 
 # =====================================================================

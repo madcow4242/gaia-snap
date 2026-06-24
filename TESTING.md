@@ -23,7 +23,7 @@ What this validates:
 Quick build test for snap artifact:
 
 ```bash
-./rebuild.sh --gaia-version=0.20.0 --snap
+./rebuild.sh --gaia-version=<version> --snap
 ```
 
 If you run `./rebuild.sh` with no flags, all build targets are attempted.
@@ -31,7 +31,7 @@ If you run `./rebuild.sh` with no flags, all build targets are attempted.
 Recommended full-pipeline validation command:
 
 ```bash
-./rebuild.sh --gaia-version=0.20.0
+./rebuild.sh --gaia-version=<version>
 ```
 
 This should produce Snap, OCI rock, Docker archive, and LXD archive artifacts.

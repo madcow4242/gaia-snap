@@ -8,13 +8,13 @@ Targets built by this workspace:
 - Docker archive/image (converted from OCI with `skopeo`)
 - LXD importable sandbox archive
 
-Current packaged GAIA version: `0.20.0`
+Current default GAIA version in rebuild.sh: 0.21.2
 
 ## Quick Start
 
 ```bash
 # 1) Build all artifacts
-./rebuild.sh --gaia-version=0.20.0
+./rebuild.sh --gaia-version=<version>
 
 # 2) Validate workspace consistency
 bash test.sh
@@ -54,7 +54,7 @@ sudo apt install -y snapcraft rockcraft skopeo lxd docker.io
 Full build (all targets):
 
 ```bash
-./rebuild.sh --gaia-version=0.20.0
+./rebuild.sh --gaia-version=<version>
 ```
 
 Interactive version prompt (all targets):
@@ -66,10 +66,10 @@ Interactive version prompt (all targets):
 Targeted builds:
 
 ```bash
-./rebuild.sh --gaia-version=0.20.0 --snap
-./rebuild.sh --gaia-version=0.20.0 --oci
-./rebuild.sh --gaia-version=0.20.0 --docker
-./rebuild.sh --gaia-version=0.20.0 --lxd
+./rebuild.sh --gaia-version=<version> --snap
+./rebuild.sh --gaia-version=<version> --oci
+./rebuild.sh --gaia-version=<version> --docker
+./rebuild.sh --gaia-version=<version> --lxd
 ```
 
 ## Install and Run

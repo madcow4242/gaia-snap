@@ -9,7 +9,7 @@ set -euo pipefail
 
 WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAST_VERSION_FILE="${WORKSPACE_DIR}/.last_version"
-DEFAULT_VERSION="0.20.0"
+DEFAULT_VERSION="0.21.2"
 TARGET_VERSION=""
 TOTAL_PURGE=false
 
@@ -29,9 +29,9 @@ Modes:
 
 Examples:
   ./cleanup.sh
-  ./cleanup.sh 0.20.0
-  ./cleanup.sh --version=0.20.0
-  sudo ./cleanup.sh --total-purge --version=0.20.0
+    ./cleanup.sh 0.21.2
+    ./cleanup.sh --version=0.21.2
+    sudo ./cleanup.sh --total-purge --version=0.21.2
 EOF
 }
 
@@ -58,7 +58,7 @@ require_root() {
 validate_version() {
     if ! [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         error "Invalid version format: $1"
-        error "Expected semantic version format X.Y.Z (example: 0.20.0)."
+        error "Expected semantic version format X.Y.Z (example: 0.21.2)."
         exit 1
     fi
 }
@@ -208,7 +208,6 @@ purge_deployments() {
         lxc delete gaia-runtime-sandbox --force >/dev/null 2>&1 || true
         lxc image delete "gaia-desktop/${TARGET_VERSION}" >/dev/null 2>&1 || true
         lxc image delete "amd-gaia/${TARGET_VERSION}" >/dev/null 2>&1 || true
-        lxc image delete "amd-gaia/0.20.0" >/dev/null 2>&1 || true
 
         for proj in snapcraft rockcraft; do
             if lxc project list --format csv | awk -F, '{print $1}' | grep -qx "$proj"; then

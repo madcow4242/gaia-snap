@@ -58,7 +58,7 @@ parts:
       - python3-setuptools
       - git
     override-build: |
-      VERSION_TAG="0.20.0"
+      VERSION_TAG="0.21.2"
        
       echo "LOG: Setting snap version metadata: ${VERSION_TAG}"
       craftctl set version="${VERSION_TAG}"
