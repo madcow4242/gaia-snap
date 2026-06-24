@@ -66,11 +66,11 @@ GLOBAL_START_TIME=$SECONDS
 # =====================================================================
 # Build configuration
 # =====================================================================
-export CRAFT_PARALLEL_BUILD_COUNT=6
+export CRAFT_PARALLEL_BUILD_COUNT=2
 
 # Optional host tuning commands (disabled by default)
-# sudo apt install cpulimit
-# powerprofilesctl set power-saver
+sudo apt install cpulimit
+powerprofilesctl set power-saver
 # powerprofilesctl set performance
 
 # =====================================================================

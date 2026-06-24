@@ -30,8 +30,9 @@ check_distro
 create_desktop_launcher() {
     local LAUNCHER_NAME="$1"        # e.g., "gaia-lxd"
     local LAUNCHER_EXEC="$2"        # command to execute
-    local LAUNCHER_DESC="$3"        # description
-    local ICON_NAME="${4:-gaia}"    # icon name
+    local LAUNCHER_DESC="$3"        # description (shown as Comment)
+    local ICON_PATH="${4:-/snap/gaia-desktop/current/meta/gui/amd-gaia.png}"  # full icon path
+    local APP_NAME="$5"             # display name in app menu
 
     # Create wrapper script in /usr/local/bin
     sudo tee "/usr/local/bin/${LAUNCHER_NAME}" > /dev/null <<'SCRIPT_EOF'
@@ -45,16 +46,16 @@ SCRIPT_EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=GAIA Desktop
+Name=${APP_NAME}
 Comment=${LAUNCHER_DESC}
 Exec=/usr/local/bin/${LAUNCHER_NAME}
-Icon=${ICON_NAME}
+Icon=${ICON_PATH}
 Categories=Utility;Development;AI;
 StartupNotify=true
 Terminal=false
 DESKTOP_EOF
 
-    echo "✅ Desktop launcher created: ${LAUNCHER_NAME}"
+    echo "✅ Desktop launcher created: ${LAUNCHER_NAME} (${APP_NAME})"
 }
 
 # =====================================================================
@@ -317,7 +318,7 @@ EOF"
 
     # Create desktop launcher for LXD deployment
     LXD_LAUNCHER_CMD="if ! lxc info gaia-runtime-sandbox >/dev/null 2>&1; then echo 'LXD container not found. Run install_gaia.sh first.'; exit 1; fi; lxc start gaia-runtime-sandbox 2>/dev/null || true; sleep 1; lxc exec gaia-runtime-sandbox -- env DISPLAY=\${DISPLAY:-:0} WAYLAND_DISPLAY=\${WAYLAND_DISPLAY} XDG_RUNTIME_DIR=/tmp /snap/bin/gaia-desktop --no-sandbox"
-    create_desktop_launcher "gaia-lxd" "$LXD_LAUNCHER_CMD" "GAIA Desktop (LXD Container)" "gaia"
+    create_desktop_launcher "gaia-lxd" "$LXD_LAUNCHER_CMD" "GAIA Desktop (LXD Container)" "" "GAIA-LXD"
     echo "=========================================================================="
     echo "✅ LXD deployment complete!"
     echo "   GAIA is now available in your application menu as 'GAIA Desktop (LXD Container)'"
@@ -406,7 +407,7 @@ elif [[ "$TOPOLOGY_CHOICE" == "3" ]]; then
 
     # Create desktop launcher for Docker deployment
     DOCKER_LAUNCHER_CMD="if ! docker inspect gaia-docker-sandbox >/dev/null 2>&1; then echo 'Docker container not found. Run install_gaia.sh first.'; exit 1; fi; docker start gaia-docker-sandbox 2>/dev/null || true; sleep 1; docker exec -it gaia-docker-sandbox /opt/gaia_runtime/opt/GAIA/gaia-desktop"
-    create_desktop_launcher "gaia-docker" "$DOCKER_LAUNCHER_CMD" "GAIA Desktop (Docker Container)" "gaia"
+    create_desktop_launcher "gaia-docker" "$DOCKER_LAUNCHER_CMD" "GAIA Desktop (Docker Container)" "" "GAIA-Docker"
     echo "=========================================================================="
     echo "✅ Docker deployment complete!"
     echo "   GAIA is now available in your application menu as 'GAIA Desktop (Docker Container)'"
@@ -466,7 +467,7 @@ elif [[ "$TOPOLOGY_CHOICE" == "4" ]]; then
 
     # Create desktop launcher for Podman deployment
     PODMAN_LAUNCHER_CMD="if ! podman inspect gaia-podman-sandbox >/dev/null 2>&1; then echo 'Podman container not found. Run install_gaia.sh first.'; exit 1; fi; podman start gaia-podman-sandbox 2>/dev/null || true; sleep 1; podman exec -it gaia-podman-sandbox /opt/gaia_runtime/opt/GAIA/gaia-desktop"
-    create_desktop_launcher "gaia-podman" "$PODMAN_LAUNCHER_CMD" "GAIA Desktop (Podman Container)" "gaia"
+    create_desktop_launcher "gaia-podman" "$PODMAN_LAUNCHER_CMD" "GAIA Desktop (Podman Container)" "" "GAIA-Podman"
     echo "=========================================================================="
     echo "✅ Podman deployment complete!"
     echo "   GAIA is now available in your application menu as 'GAIA Desktop (Podman Container)'"
