@@ -4,43 +4,51 @@ set -e
 stty sane 2>/dev/null || true
 printf "\033[K"
 
-# Configure local application workspace filesystem registries
+# Runtime environment setup
 export HOME="${HOME}"
 export GAIA_HOME="${HOME}/.gaia"
 export GAIA_ALLOW_ORIGINS="*"
 export PYTHONWARNINGS="default"
 export PYTHONNOUSERSITE=1
 
-# The officially supported updater suppression hooks
+# Disable updater behavior inside packaged runtime
 export GAIA_DISABLE_UPDATE=1
 export GAIA_DISABLE_UPDATE_CHECK="true"
 
-# FORCE UV PIP BEST-MATCH REPOSITORY STRATEGY
+# UV package index behavior
 export UV_INDEX_STRATEGY="unsafe-best-match"
 export UV_EXTRA_INDEX_URL="https://pypi.org/simple"
 
-# Specify TMPDIR needed for appindicator
+# TMPDIR used by runtime dependencies
 export TMPDIR=$XDG_RUNTIME_DIR
 
-# Universal Path Map Matrix Definitions
+# Path setup for staged runtime files
 export PYTHONPATH="${SNAP}/lib/python_patches:${PYTHONPATH}"
 export PATH="${SNAP}/venv/bin:${SNAP}/usr/bin:${PATH}:/usr/bin:/bin"
 
 # HYBRID RESOLUTION ENGINE: Pull from environment vars or fall back to snapctl
 RAW_LLM_URL="${backend_url}"
 if [ -z "$RAW_LLM_URL" ] && command -v snapctl &>/dev/null; then
-    RAW_LLM_URL=$(snapctl get backend.url)
+    RAW_LLM_URL=$(snapctl get backend.url 2>/dev/null || true)
 fi
 if [ -z "$RAW_LLM_URL" ]; then
     RAW_LLM_URL="http://127.0.0.1:13305"
 fi
 
+# Validate critical LLM URL setting
+if [ -z "$RAW_LLM_URL" ] || [ "$RAW_LLM_URL" = "null" ]; then
+    echo "ERROR: Failed to resolve LLM backend URL from any source (env var, snapctl, hardcoded default). This is a critical configuration error." >&2
+    echo "DEBUG: Attempted sources: backend_url env var, snapctl backend.url, hardcoded default http://127.0.0.1:13305" >&2
+    exit 1
+fi
+
 export GAIA_LLM_URL="${RAW_LLM_URL}"
 export LEMONADE_BASE_URL="${RAW_LLM_URL}/api/v1"
 
+[ "${GAIA_DEBUG}" = "1" ] && echo "INFO [DEBUG]: Resolved LLM URL to: ${GAIA_LLM_URL} (from backend_url env var or snapctl)" >&2
 echo "INFO: Classic Mode: Directing outbound AI model traffic to target server layout: ${GAIA_LLM_URL}"
 
-# Iterate services using hybrid environment variables vs snapctl fallback logic
+# Resolve optional provider API keys from env vars or snapctl
 for service in openai anthropic groq tavily serper; do
     VAL=""
     case "$service" in
@@ -62,15 +70,23 @@ for service in openai anthropic groq tavily serper; do
     fi
 done
 
-# Resolve max-steps parameters
+# Resolve max-steps from env vars or snapctl
 MAX_STEPS="${backend_maxsteps}"
 if [ -z "$MAX_STEPS" ] && command -v snapctl &>/dev/null; then
-    MAX_STEPS=$(snapctl get backend.maxsteps)
+    MAX_STEPS=$(snapctl get backend.maxsteps 2>/dev/null || true)
 fi
 if [ -z "$MAX_STEPS" ]; then
     MAX_STEPS=20
 fi
+
+# Validate MAX_STEPS is a positive integer
+if ! [[ "$MAX_STEPS" =~ ^[0-9]+$ ]] || [ "$MAX_STEPS" -lt 1 ]; then
+    echo "WARNING: Invalid MAX_STEPS value '$MAX_STEPS'. Resetting to default (20)." >&2
+    MAX_STEPS=20
+fi
+
 export GAIA_MAX_STEPS="${MAX_STEPS}"
+[ "${GAIA_DEBUG}" = "1" ] && echo "INFO [DEBUG]: Resolved max-steps to: $GAIA_MAX_STEPS" >&2
 echo "[CONFIG] Set max-steps to $GAIA_MAX_STEPS "
 
 export HTTP_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
@@ -89,7 +105,7 @@ fi
 
 if [ "$(id -u)" -ne 0 ]; then
     if [ -n "${GAIA_HOME}" ] && [ "${GAIA_HOME}" != "/" ] && [ "${GAIA_HOME}" != "/home" ]; then
-        echo "LOG: Enforcing host profile user ownership claims safely..."
+        echo "INFO: Ensuring user ownership of ${GAIA_HOME}."
         sudo chown -R "$(id -u):$(id -g)" "${GAIA_HOME}" 2>/dev/null || true
     else
         echo "ERROR: GAIA_HOME target path is invalid or unbound! Aborting ownership sync to protect host."
@@ -144,9 +160,9 @@ EOF
 
 chmod +x "${GAIA_HOME}/venv/bin/gaia"
 
-echo "LOG: Sanitizing runtime execution paths and launching core binary..."
+echo "INFO: Launching GAIA desktop runtime."
 
-# Universal GUI/Stability flags inside the universal container context
+# Electron stability flags for constrained environments
 export ELECTRON_DISABLE_GPU=1
 export ELECTRON_SKIP_BINARY_DOWNLOAD=1
 

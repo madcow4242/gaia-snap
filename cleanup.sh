@@ -1,191 +1,257 @@
 #!/bin/bash
-# =====================================================================
-# GAIA WORKSTATION DEEP CLEANUP & FILE SYSTEM OPTIMIZATION ENGINE
-# =====================================================================
-set -e
+set -euo pipefail
 
-# Ensure the execution frame is running with root access privileges
-if [ "$EUID" -ne 0 ]; then
-    echo "❌ ERROR: This maintenance utility must be executed with root privileges." >&2
-    echo "Please run via: sudo ./cleanup.sh" >&2
-    exit 1
-fi
+# ---------------------------------------------------------------------
+# GAIA cleanup utility
+#   Default mode: clean local build environment (artifacts + intermediates)
+#   --total-purge: remove all GAIA artifacts, state, and cached downloads
+# ---------------------------------------------------------------------
 
-INITIAL_SPACE=$(df -h / | awk 'NR==2 {print $4}')
-echo "====================================================================="
-echo "🧹 INITIALIZING SYSTEMIC RECLAIM SWEEP (Starting Free Space: $INITIAL_SPACE)"
-echo "====================================================================="
-
-# Parse arguments safely
-TARGET_VERSION="0.20.0"
+WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LAST_VERSION_FILE="${WORKSPACE_DIR}/.last_version"
+DEFAULT_VERSION="0.20.0"
+TARGET_VERSION=""
 TOTAL_PURGE=false
 
-for arg in "$@"; do
-    case $arg in
-        --total-purge)
-            TOTAL_PURGE=true
-            ;;
-        *)
-            # If a standalone version token is passed (e.g., 0.21.0), capture it
-            if [[ "$arg" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-                TARGET_VERSION="$arg"
-            fi
-            ;;
-    esac
-done
+usage() {
+    cat <<'EOF'
+Usage:
+  ./cleanup.sh [<version>] [--version=<version>] [--total-purge]
 
-# =====================================================================
-# DESTRUCTIVE PHASE: ATOMIC UNINSTALL & FRESH STATE RESET
-# =====================================================================
-if [ "$TOTAL_PURGE" = true ]; then
-    echo "⚠️  WARNING: --total-purge flag detected! Commencing total environment eviction..."
+Modes:
+  Default (no flags):
+    Cleans build outputs and intermediate state so the next build uses current
+    source changes without stale local artifacts.
 
-    # 1. Strip out the native application Snap layer completely
-    if snap list gaia-desktop &>/dev/null; then
-        echo "🔥 Purging native gaia-desktop snap deployment layer..."
-        snap remove --purge gaia-desktop || true
+  --total-purge:
+    Performs default cleanup plus removal of GAIA deployment/runtime state and
+    cached download/build tool contents for a first-time-build baseline.
+
+Examples:
+  ./cleanup.sh
+  ./cleanup.sh 0.20.0
+  ./cleanup.sh --version=0.20.0
+  sudo ./cleanup.sh --total-purge --version=0.20.0
+EOF
+}
+
+log() {
+    echo "INFO: $*"
+}
+
+warn() {
+    echo "WARNING: $*" >&2
+}
+
+error() {
+    echo "ERROR: $*" >&2
+}
+
+require_root() {
+    if [[ "$EUID" -ne 0 ]]; then
+        error "--total-purge requires root privileges."
+        error "Run: sudo ./cleanup.sh --total-purge [--version=X.Y.Z]"
+        exit 1
+    fi
+}
+
+validate_version() {
+    if ! [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        error "Invalid version format: $1"
+        error "Expected semantic version format X.Y.Z (example: 0.20.0)."
+        exit 1
+    fi
+}
+
+resolve_target_version() {
+    if [[ -n "$TARGET_VERSION" ]]; then
+        validate_version "$TARGET_VERSION"
+        return
     fi
 
-    # 2. Force terminate and clear all host-level Docker deployments
-    if command -v docker &> /dev/null; then
-        echo "🔥 Evicting all gaia-docker instances and local registry caches..."
+    if [[ -f "$LAST_VERSION_FILE" ]]; then
+        TARGET_VERSION="$(cat "$LAST_VERSION_FILE")"
+    else
+        TARGET_VERSION="$DEFAULT_VERSION"
+    fi
+
+    validate_version "$TARGET_VERSION"
+}
+
+parse_args() {
+    for arg in "$@"; do
+        case "$arg" in
+            --total-purge)
+                TOTAL_PURGE=true
+                ;;
+            --version=*)
+                TARGET_VERSION="${arg#*=}"
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                if [[ "$arg" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    TARGET_VERSION="$arg"
+                else
+                    error "Unknown argument: $arg"
+                    usage
+                    exit 1
+                fi
+                ;;
+        esac
+    done
+}
+
+remove_workspace_artifacts() {
+    log "Removing workspace build artifacts."
+
+    shopt -s nullglob
+    local files=(
+        "${WORKSPACE_DIR}"/*.snap
+        "${WORKSPACE_DIR}"/*.rock
+        "${WORKSPACE_DIR}"/*_docker-image.tar
+        "${WORKSPACE_DIR}"/*_LXD-sandbox.tar.gz
+    )
+
+    if (( ${#files[@]} > 0 )); then
+        rm -f "${files[@]}"
+    fi
+    shopt -u nullglob
+
+    rm -rf "${WORKSPACE_DIR}/src_rock"
+}
+
+clean_build_intermediates() {
+    log "Cleaning snapcraft/rockcraft intermediates (preserving download caches)."
+
+    if command -v snapcraft >/dev/null 2>&1; then
+        snapcraft clean gaia-desktop --step=prime >/dev/null 2>&1 || true
+        snapcraft clean gaia-backend --step=prime >/dev/null 2>&1 || true
+    fi
+
+    if command -v rockcraft >/dev/null 2>&1; then
+        rockcraft clean gaia-container-runtime >/dev/null 2>&1 || true
+        rockcraft clean >/dev/null 2>&1 || true
+    fi
+}
+
+clean_staging_paths() {
+    log "Removing temporary GAIA staging files from /tmp and /var/tmp."
+
+    rm -f /tmp/gaia-desktop_*_docker-image.tar 2>/dev/null || true
+    rm -f /tmp/gaia-docker-stage.tar /tmp/gaia-podman-stage.tar 2>/dev/null || true
+    rm -rf /var/tmp/gaia-* 2>/dev/null || true
+}
+
+clean_build_workers() {
+    log "Cleaning ephemeral build worker state."
+
+    if command -v lxc >/dev/null 2>&1; then
+        lxc delete gaia-worker --force >/dev/null 2>&1 || true
+        lxc image delete "gaia-desktop/${TARGET_VERSION}" >/dev/null 2>&1 || true
+    fi
+
+    if command -v docker >/dev/null 2>&1; then
+        docker image rm -f "gaia-desktop:${TARGET_VERSION}" >/dev/null 2>&1 || true
+    fi
+}
+
+normal_cleanup() {
+    remove_workspace_artifacts
+    clean_build_intermediates
+    clean_staging_paths
+    clean_build_workers
+}
+
+purge_user_state() {
+    log "Removing GAIA user/runtime state and tool caches."
+
+    rm -rf /root/.gaia /root/.cache/@amd-gaiaagent-ui-updater 2>/dev/null || true
+    rm -rf /root/.cache/snapcraft /root/.cache/rockcraft 2>/dev/null || true
+    rm -rf /root/snap/gaia-desktop 2>/dev/null || true
+
+    for user_home in /home/*; do
+        [[ -d "$user_home" ]] || continue
+        rm -rf "${user_home}/.gaia" 2>/dev/null || true
+        rm -rf "${user_home}/.cache/@amd-gaiaagent-ui-updater" 2>/dev/null || true
+        rm -rf "${user_home}/.cache/snapcraft" "${user_home}/.cache/rockcraft" 2>/dev/null || true
+        rm -rf "${user_home}/snap/gaia-desktop" 2>/dev/null || true
+    done
+}
+
+purge_deployments() {
+    log "Removing deployed GAIA runtimes and images."
+
+    if command -v snap >/dev/null 2>&1; then
+        snap remove --purge gaia-desktop >/dev/null 2>&1 || true
+    fi
+
+    if command -v docker >/dev/null 2>&1; then
         docker rm -f gaia-docker-sandbox >/dev/null 2>&1 || true
-        docker rmi -f "gaia-desktop:${TARGET_VERSION}" >/dev/null 2>&1 || true
-        docker rmi -f $(docker images -q "gaia-desktop" 2>/dev/null) >/dev/null 2>&1 || true
+        docker image rm -f "gaia-desktop:${TARGET_VERSION}" >/dev/null 2>&1 || true
+        docker image rm -f $(docker images -q "gaia-desktop" 2>/dev/null) >/dev/null 2>&1 || true
+        docker builder prune -f >/dev/null 2>&1 || true
+        docker system prune -a -f >/dev/null 2>&1 || true
     fi
 
-    # 3. Force terminate and clear all rootless Podman deployments
-    if command -v podman &> /dev/null; then
-        echo "🔥 Evicting all gaia-podman instances and registry image caches..."
+    if command -v podman >/dev/null 2>&1; then
         podman rm -f gaia-podman-sandbox >/dev/null 2>&1 || true
-        podman rmi -f "gaia-desktop:${TARGET_VERSION}" >/dev/null 2>&1 || true
-        podman rmi -f $(podman images -q "gaia-desktop" 2>/dev/null) >/dev/null 2>&1 || true
+        podman image rm -f "gaia-desktop:${TARGET_VERSION}" >/dev/null 2>&1 || true
+        podman image rm -f $(podman images -q "gaia-desktop" 2>/dev/null) >/dev/null 2>&1 || true
+        podman system prune -a -f >/dev/null 2>&1 || true
     fi
 
-    # 4. Wipe runtime configurations and application databases entirely
-    echo "🔥 Vacuuming application databases, workspaces, and cached state files..."
-    rm -rf /root/.gaia
-    rm -rf /home/*/.gaia
+    if command -v lxc >/dev/null 2>&1; then
+        lxc delete gaia-worker --force >/dev/null 2>&1 || true
+        lxc delete gaia-runtime-sandbox --force >/dev/null 2>&1 || true
+        lxc image delete "gaia-desktop/${TARGET_VERSION}" >/dev/null 2>&1 || true
+        lxc image delete "amd-gaia/${TARGET_VERSION}" >/dev/null 2>&1 || true
+        lxc image delete "amd-gaia/0.20.0" >/dev/null 2>&1 || true
 
-    # 5. Clean rockcraft cache
-    echo "🔥 Cleaning rockcraft build caches..."
-    rockcraft clean gaia-container-runtime
-    rockcraft clean
+        for proj in snapcraft rockcraft; do
+            if lxc project list --format csv | awk -F, '{print $1}' | grep -qx "$proj"; then
+                while IFS= read -r inst; do
+                    [[ -n "$inst" ]] || continue
+                    lxc delete --project "$proj" "$inst" --force >/dev/null 2>&1 || true
+                done < <(lxc list --project "$proj" -c n --format csv 2>/dev/null || true)
+                lxc image prune --project "$proj" --force >/dev/null 2>&1 || true
+            fi
+        done
 
-    # 6. Clean docker
-    echo "🔥 Cleaning docker build caches..."
-    docker rm -f gaia-docker-sandbox
-    docker rmi -f gaia-desktop:0.20.0
-    rm -f /tmp/gaia-desktop_0.20.0_docker-image.tar
-    rm -rf /home/kevin/Documents/.gaia
-
-    echo "====================================================================="
-fi
-
-# =====================================================================
-# PHASE 1: FORCE EVICT ACTIVE/ORPHANED BUILD WORKERS & LEGACY IMAGES
-# =====================================================================
-echo "LOG: Terminating active and orphaned build worker instances..."
-if command -v lxc &> /dev/null; then
-    # Evict worker container instances
-    lxc delete gaia-worker --force >/dev/null 2>&1 || true
-    lxc delete gaia-runtime-sandbox --force >/dev/null 2>&1 || true
-
-    # Evict images tracking versions cleanly
-    lxc image delete "gaia-desktop/0.20.0${TARGET_VERSION}" >/dev/null 2>&1 || true
-
-    # Surgical eviction of any lingering legacy namespaced images
-    lxc image delete "amd-gaia/${TARGET_VERSION}" >/dev/null 2>&1 || true
-    lxc image delete "amd-gaia/0.20.0" >/dev/null 2>&1 || true
-fi
-
-# =====================================================================
-# PHASE 2: PURGE HIDDEN SNAPCONTAINER/ROCKCONTAINER REPOS & USER CACHES
-# =====================================================================
-echo "LOG: Wiping untracked staging archives from system partitions..."
-rm -rf /var/tmp/gaia-*
-rm -rf /home/*/.local/share/Trash/files/*
-
-echo "LOG: Evicting hidden user-space build tool manager caches..."
-rm -rf /home/*/.cache/snapcraft
-rm -rf /home/*/.cache/rockcraft
-rm -rf /root/.cache/snapcraft
-rm -rf /root/.cache/rockcraft
-
-for user_home in /home/*; do
-    if [ -d "${user_home}/snap/docker/common" ]; then
-        echo "LOG: Clearing staging ground layers inside user workspace: ${user_home}"
-        rm -rf "${user_home}"/snap/docker/common/gaia-lxd-staging-*
-    fi
-done
-
-# =====================================================================
-# PHASE 3: ATOMIC PURGE OF HIDDEN LXD PROJECT NAMESPACES
-# =====================================================================
-if command -v lxc &> /dev/null; then
-    echo "LOG: Deep scanning hidden hypervisor project namespaces..."
-
-    for proj in "snapcraft" "rockcraft"; do
-        if lxc project list --format csv | grep -q "^${proj},"; then
-            echo "LOG: Purging unreferenced build infrastructure inside project space [${proj}]..."
-
-            for inst in $(lxc list --project "$proj" -c n --format csv 2>/dev/null); do
-                lxc delete --project "$proj" "$inst" --force >/dev/null 2>&1 || true
-            done
-
+        while IFS= read -r proj; do
+            [[ -n "$proj" ]] || continue
             lxc image prune --project "$proj" --force >/dev/null 2>&1 || true
-        fi
-    done
-
-    for proj in $(lxc project list --format csv | awk -F, '{print $1}'); do
-        lxc image prune --project "$proj" --force >/dev/null 2>&1 || true
-    done
-
-    echo "LOG: Evicting unlinked raw hypervisor caching directories..."
-    rm -rf /var/snap/lxd/common/lxd/storage-pools/default/images/snapcraft
-    rm -rf /var/snap/lxd/common/lxd/storage-pools/default/containers/snapcraft
-    rm -rf /var/snap/lxd/common/lxd/storage-pools/default/images/rockcraft
-    rm -rf /var/snap/lxd/common/lxd/storage-pools/default/containers/rockcraft
-    rm -rf /var/snap/lxd/common/lxd/storage-pools/default/custom/snapcraft
-    rm -rf /var/snap/lxd/common/lxd/storage-pools/default/custom/rockcraft
-fi
-
-# =====================================================================
-# PHASE 4: RECLAIM CONFINED SYSTEM DAEMON CLONE HEADROOM
-# =====================================================================
-echo "LOG: Evicting disabled duplicate revisions from the Snapd database..."
-snap list --all | awk '/disabled/{print $1, $3}' | while read snapname revision; do
-    if [ -n "$snapname" ] && [ -n "$revision" ]; then
-        echo "Removing stale iteration: ${snapname} (rev ${revision})"
-        snap remove "$snapname" --revision="$revision" >/dev/null 2>&1 || true
+        done < <(lxc project list --format csv | awk -F, '{print $1}')
     fi
-done
+}
 
-echo "LOG: Vacuuming operating system package manager storage archives..."
-apt-get autoremove -y >/dev/null 2>&1
-apt-get clean -y >/dev/null 2>&1
+total_purge_cleanup() {
+    require_root
+    normal_cleanup
+    purge_deployments
+    purge_user_state
 
-# =====================================================================
-# PHASE 5: DOCKER BUILD ENGINE GARBAGE COLLECTION
-# =====================================================================
-if command -v docker &> /dev/null; then
-    echo "LOG: Running deep garbage collection pass across Docker build engines..."
-    docker builder prune -f >/dev/null 2>&1 || true
-    docker image prune -f >/dev/null 2>&1 || true
-    docker system prune -a -f >/dev/null 2>&1 || true
-fi
+    if command -v apt-get >/dev/null 2>&1; then
+        log "Cleaning apt package cache."
+        apt-get clean -y >/dev/null 2>&1 || true
+    fi
+}
 
-# =====================================================================
-# PHASE 6: HARDWARE CONCURRENCY FILE ALLOCATION SYNC
-# =====================================================================
-echo "LOG: Signaling system kernel to commit deleted blocks to flash sectors..."
-sync
-sleep 2
+main() {
+    parse_args "$@"
+    resolve_target_version
 
-FINAL_SPACE=$(df -h / | awk 'NR==2 {print $4}')
-echo "====================================================================="
-echo "🎉 SYSTEM DEEP CLEANUP PIPELINE PASS COMPLETE!"
-echo "---------------------------------------------------------------------"
-echo " Initial Headroom:   $INITIAL_SPACE"
-echo " Current Headroom:   $FINAL_SPACE"
-echo "====================================================================="
+    if [[ "$TOTAL_PURGE" == true ]]; then
+        log "Running TOTAL PURGE for version ${TARGET_VERSION}."
+        total_purge_cleanup
+        log "Total purge complete. System is reset to a first-time-build baseline."
+    else
+        log "Running NORMAL cleanup for version ${TARGET_VERSION}."
+        normal_cleanup
+        log "Normal cleanup complete. Build environment is ready for a fresh rebuild."
+    fi
+}
+
+main "$@"

@@ -1,9 +1,9 @@
 name: gaia-desktop
-summary: Production-grade chiseled container engine for GAIA orchestration
+summary: OCI container runtime for GAIA
 description: |
-  An OCI-compliant secure microservice instance of the GAIA framework 
-  running your portable optimizations inside a distroless runtime slice.
-version: &global_version "0.20.0" # 🎯 THE SINGLE SOURCE OF TRUTH (Anchor)
+  OCI-compliant container packaging for the GAIA framework
+  using a minimal runtime base.
+version: &global_version "0.20.0" # shared project version anchor
 license: MIT
 
 base: bare
@@ -13,7 +13,7 @@ platforms:
   amd64:
 
 parts:
-  # PART 1: Ingest and un-wrap our custom snap layout cleanly
+  # PART 1: Extract runtime files from the snap artifact
   gaia-container-runtime:
     plugin: dump
     source: src_rock
@@ -21,25 +21,25 @@ parts:
       - squashfs-tools
     override-build: |
       TARGET_VERSION=*global_version
-      echo "LOG: Materializing Chiseled Rock configuration layout for version: ${TARGET_VERSION}"
+      echo "LOG: Preparing rock runtime layout for version: ${TARGET_VERSION}"
        
-      echo "LOG: Locating compiled desktop snap asset tracking footprints..."
+      echo "LOG: Locating snap artifact in staging directory..."
       TARGET_SNAP=$(ls -t *.snap 2>/dev/null | head -n 1)
        
-      echo "LOG: Clearing stale intermediate extraction folders..."
+      echo "LOG: Cleaning previous extraction directory..."
       rm -rf "${CRAFT_STAGE}/app_root"
        
-      echo "LOG: Deep-extracting snap root contents into Chiseled Rock file layer..."
+      echo "LOG: Extracting snap filesystem into rock staging path..."
       unsquashfs -f -d "${CRAFT_STAGE}/app_root" "${TARGET_SNAP}"
        
-      echo "LOG: Relocating target workspace execution layers..."
+      echo "LOG: Copying runtime files into final image layout..."
       mkdir -p "${CRAFT_PART_INSTALL}/bin"
       mkdir -p "${CRAFT_PART_INSTALL}/opt/gaia_runtime"
        
       cp -af "${CRAFT_STAGE}/app_root/bin/gaia-launcher.sh" "${CRAFT_PART_INSTALL}/bin/gaia-launcher"
       cp -rf "${CRAFT_STAGE}/app_root/"* "${CRAFT_PART_INSTALL}/opt/gaia_runtime/"
 
-  # PART 2: Slice in bare-minimum system dependencies (Chiseling)
+  # PART 2: Add minimal runtime dependencies
   system-dependencies:
     plugin: nil
     stage-packages:

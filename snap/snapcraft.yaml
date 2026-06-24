@@ -37,6 +37,7 @@ lint:
         - "venv/**"
         - "usr/lib/*/libicuio.so*"
         - "usr/lib/*/libicutest.so*"
+        - "usr/lib/*/libicutu.so*"
 
 apps:
   gaia-desktop:
@@ -44,7 +45,7 @@ apps:
     desktop: usr/share/applications/gaia-desktop.desktop
 
 parts:
-  # PART 1: Python Framework Backend Compilation (Zero Host Overhead)
+  # PART 1: Build Python backend runtime
   gaia-backend:
     plugin: python
     after:
@@ -59,25 +60,25 @@ parts:
     override-build: |
       VERSION_TAG="0.20.0"
        
-      echo "LOG: Setting global snap orchestration metadata target version to: ${VERSION_TAG}"
+      echo "LOG: Setting snap version metadata: ${VERSION_TAG}"
       craftctl set version="${VERSION_TAG}"
        
-      echo "LOG: Clearing any stale target workspace directories inside the build isolation container..."
+      echo "LOG: Cleaning previous source checkout directory..."
       rm -rf "${CRAFT_PART_SRC}/cloned-framework"
        
-      echo "LOG: Checking out specific tag workspace branch inside build isolation container..."
+      echo "LOG: Cloning GAIA source at tag v${VERSION_TAG}..."
       git clone --branch "v${VERSION_TAG}" https://github.com/amd/gaia.git "${CRAFT_PART_SRC}/cloned-framework"
        
-      echo "LOG: Compiling Python Backend Assets portably inside classic container namespace..."
+      echo "LOG: Building Python virtual environment for backend..."
       python3 -m venv "${CRAFT_PART_INSTALL}/venv"
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install --upgrade pip setuptools wheel
        
-      echo "LOG: Fetching portable vector processing wheels..."
+      echo "LOG: Installing vector index dependency (faiss-cpu)..."
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install faiss-cpu
        
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install "${CRAFT_PART_SRC}/cloned-framework/.[ui]"
 
-  # PART 2: UI Desktop Archive Extraction (Zero Host Overhead)
+  # PART 2: Extract desktop UI artifact
   gaia-desktop:
     plugin: nil
     after:
@@ -86,7 +87,7 @@ parts:
       - wget
     override-build: |
       RESOLVED_VERSION=$(craftctl get version)
-      echo "LOG: Downloading compiled asset package dependencies for iteration layout version: ${RESOLVED_VERSION}"
+      echo "LOG: Downloading GAIA desktop .deb for version: ${RESOLVED_VERSION}"
        
       TARGET_DEB_URL="https://github.com/amd/gaia/releases/download/v${RESOLVED_VERSION}/gaia-agent-ui-${RESOLVED_VERSION}-amd64.deb"
        
@@ -95,11 +96,15 @@ parts:
       rm -f /tmp/gaia-desktop.deb
     override-prime: |
       craftctl default
+      # Remove Electron updater feed configs if present anywhere in the GAIA payload.
+      find "${CRAFT_PRIME}/opt/GAIA" -type f \
+        \( -name 'app-update.yml' -o -name 'dev-app-update.yml' \) \
+        -print -delete || true
       mkdir -p "${CRAFT_PRIME}/opt/GAIA/resources/app.asar.unpacked/assets"
       cp "${CRAFT_PRIME}/usr/share/icons/hicolor/512x512/apps/gaia-desktop.png" \
          "${CRAFT_PRIME}/opt/GAIA/resources/app.asar.unpacked/assets/icon.png"
 
-  # PART 3: Sideload configuration launcher and operational hooks
+  # PART 3: Stage launcher and hook files
   gaia-sideloads:
     plugin: dump
     source: .
@@ -119,7 +124,7 @@ parts:
       - -*.txt
       - -LICENSE
     override-build: |
-      echo "LOG: Setting up local sideload folder structures inside build isolation container..."
+      echo "LOG: Preparing sideload directory structure..."
        
       mkdir -p "${CRAFT_PART_INSTALL}/bin"
       mkdir -p "${CRAFT_PART_INSTALL}/snap/hooks"

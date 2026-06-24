@@ -10,22 +10,119 @@ GAIA_VERSION="0.20.0"  # Centralized single source of truth for installations
 WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # =====================================================================
+# VALIDATION: System compatibility and required tools
+# =====================================================================
+check_distro() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        if [[ "$ID" != "ubuntu" ]]; then
+            echo "WARNING: This script is tested on Ubuntu 24.04. Detected: $ID $VERSION_ID"
+            echo "    Some functionality may not work as expected."
+        fi
+    fi
+}
+
+check_distro
+
+# =====================================================================
+# HELPER: Create desktop application launcher
+# =====================================================================
+create_desktop_launcher() {
+    local LAUNCHER_NAME="$1"        # e.g., "gaia-lxd"
+    local LAUNCHER_EXEC="$2"        # command to execute
+    local LAUNCHER_DESC="$3"        # description
+    local ICON_NAME="${4:-gaia}"    # icon name
+
+    # Create wrapper script in /usr/local/bin
+    sudo tee "/usr/local/bin/${LAUNCHER_NAME}" > /dev/null <<'SCRIPT_EOF'
+#!/bin/bash
+SCRIPT_EOF
+    echo "$LAUNCHER_EXEC" | sudo tee -a "/usr/local/bin/${LAUNCHER_NAME}" > /dev/null
+    sudo chmod +x "/usr/local/bin/${LAUNCHER_NAME}"
+
+    # Create .desktop file in /usr/share/applications
+    sudo tee "/usr/share/applications/${LAUNCHER_NAME}.desktop" > /dev/null <<DESKTOP_EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GAIA Desktop
+Comment=${LAUNCHER_DESC}
+Exec=/usr/local/bin/${LAUNCHER_NAME}
+Icon=${ICON_NAME}
+Categories=Utility;Development;AI;
+StartupNotify=true
+Terminal=false
+DESKTOP_EOF
+
+    echo "✅ Desktop launcher created: ${LAUNCHER_NAME}"
+}
+
+# =====================================================================
 # PHASE 1: FRONTLOADED USER INTERACTIVE DATA COLLECTION
 # =====================================================================
 
 clear
 echo "====================================================================="
-echo "        GAIA ULTRA-PORTABLE EMULATED DEPLOYMENT WORKSTATION"
+echo "        GAIA Deployment Installer"
 echo "====================================================================="
-echo " Select your target deployment topology execution framework:"
-echo "    1) Native Ubuntu Desktop Application (Snap Layer)"
-echo "    2) Secure Isolated System Container Sandbox (LXD Engine)"
-echo "    3) Dedicated Standalone Desktop Sandbox (Docker Engine)"
-echo "    4) Rootless OCI Process Container Sandbox (Podman Engine)"
-echo "    5) Enterprise Production Orchestration Blueprint (Kubernetes Core)"
+echo " Select a deployment topology:"
+echo "    1) Native host Snap"
+echo "    2) LXD system container"
+echo "    3) Docker container"
+echo "    4) Podman container"
+echo "    5) Kubernetes manifest output"
 echo "---------------------------------------------------------------------"
 
 read -p " Enter Choice (1-5): " TOPOLOGY_CHOICE
+
+# =====================================================================
+# PRE-FLIGHT VALIDATION: Check required tools for chosen topology
+# =====================================================================
+validate_topology_tools() {
+    case "$1" in
+        1)
+            if ! command -v snap &>/dev/null; then
+                echo "ERROR: Snap is not installed on this system."
+                echo "   Install with: sudo apt install snapd"
+                exit 1
+            fi
+            ;;
+        2)
+            if ! command -v lxc &>/dev/null; then
+                echo "ERROR: LXD CLI is not installed on this system."
+                echo "   Install with: sudo apt install lxd"
+                exit 1
+            fi
+            ;;
+        3)
+            if ! command -v docker &>/dev/null; then
+                echo "ERROR: Docker is not installed on this system."
+                echo "   Install with: sudo apt install docker.io"
+                exit 1
+            fi
+            ;;
+        4)
+            if ! command -v podman &>/dev/null; then
+                echo "ERROR: Podman is not installed on this system."
+                echo "   Install with: sudo apt install podman"
+                exit 1
+            fi
+            ;;
+        5)
+            if ! command -v kubectl &>/dev/null; then
+                echo "ERROR: kubectl is not installed on this system."
+                echo "   Install from: https://kubernetes.io/docs/tasks/tools/"
+                exit 1
+            fi
+            ;;
+        *)
+            echo "ERROR: Invalid topology choice. Please select 1-5."
+            exit 1
+            ;;
+    esac
+}
+
+validate_topology_tools "$TOPOLOGY_CHOICE"
 
 # Prompt common configuration settings
 read -p " Enter your Lemonade/AI Backend URL [http://127.0.0.1:13305]: " BACKEND_URL
@@ -52,7 +149,7 @@ if [[ "$TOPOLOGY_CHOICE" =~ ^(2|3|4)$ ]]; then
 fi
 
 # =====================================================================
-# 🎯 INTELLIGENT WORKSPACE MOUNT DETECTION & STAGING ENGINE
+# Workspace mount detection and artifact staging
 # =====================================================================
 IS_REMOTE_MOUNT=false
 LOCAL_TAR_STAGE=""
@@ -60,8 +157,8 @@ LOCAL_TAR_STAGE=""
 # Detect if the workspace directory is parked on a network mount
 if [[ "$WORKSPACE_DIR" == /mnt/userver* ]]; then
     echo "---------------------------------------------------------------------"
-    echo "💡 DETECTED: Script running inside a remote network mount partition."
-    echo "             Activating isolated local asset caching layer..."
+    echo "INFO: Remote network mount detected."
+    echo "      Enabling local cache staging for large artifacts."
     echo "---------------------------------------------------------------------"
     IS_REMOTE_MOUNT=true
     LOCAL_TAR_STAGE="/tmp/gaia-desktop_${GAIA_VERSION}_docker-image.tar"
@@ -69,10 +166,10 @@ if [[ "$WORKSPACE_DIR" == /mnt/userver* ]]; then
     # Pre-flight scp transfer onto your Zenbook's native local SSD storage
     if [[ "$TOPOLOGY_CHOICE" =~ ^(3|4)$ ]]; then
         if [ ! -f "$LOCAL_TAR_STAGE" ]; then
-            echo "LOG: Fetching large deployment archive securely over network link..."
+            echo "INFO: Fetching Docker archive to local staging path."
             scp kevin@userver:/mnt/md0/backups/SoftwareDev/gaia-snap/gaia-desktop_${GAIA_VERSION}_docker-image.tar "$LOCAL_TAR_STAGE"
         else
-            echo "LOG: Utilizing existing local target cache: $LOCAL_TAR_STAGE"
+            echo "INFO: Reusing local staged archive: $LOCAL_TAR_STAGE"
         fi
     fi
 fi
@@ -96,28 +193,42 @@ fi
 # OPTION 1: NATIVE DESKTOP SNAP ENVIRONMENT DEPLOYMENT
 # ---------------------------------------------------------------------
 if [[ "$TOPOLOGY_CHOICE" == "1" ]]; then
-    echo "LOG: Initializing Native Ubuntu Desktop Snap Layer Installation..."
+    echo "INFO: Installing GAIA as a native Snap."
     if [ -z "$SNAP_PACKAGE" ]; then
-        echo "❌ ERROR: No local .snap artifact found in the working directory."
+        echo "ERROR: No local .snap artifact found in the working directory."
         exit 1
     fi
     sudo snap install "$SNAP_PACKAGE" --dangerous --classic
     sudo snap set gaia-desktop backend.url="$BACKEND_URL" backend.maxsteps="$AGENT_STEPS" keys.openai="$OPENAI_KEY" keys.anthropic="$ANTHROPIC_KEY" keys.groq="$GROQ_KEY" keys.tavily="$TAVILY_KEY" keys.serper="$SERPER_KEY"
-    echo "✨ SUCCESS: GAIA Snap Topology Installed Successfully!"
+    echo "INFO: GAIA Snap installation complete."
+
+    # Restore previous installer behavior: launch the desktop app after install
+    if [ -n "${DISPLAY}" ] || [ -n "${WAYLAND_DISPLAY}" ]; then
+        echo "INFO: Launching GAIA desktop application."
+        snap run gaia-desktop >/dev/null 2>&1 &
+    else
+        echo "INFO: No graphical session detected; skipping automatic launch."
+    fi
+
+    echo "=========================================================================="
+    echo "✅ Snap deployment complete!"
+    echo "   GAIA is now available in your application menu with system tray integration."
+    echo "   Search for 'GAIA' in the application launcher, or run: snap run gaia-desktop"
+    echo "=========================================================================="
 
 # ---------------------------------------------------------------------
 # OPTION 2: SECURE ISOLATED LXD SANDBOX SYSTEM CONTAINER
 # ---------------------------------------------------------------------
 elif [[ "$TOPOLOGY_CHOICE" == "2" ]]; then
-    echo "LOG: Deploying Secure Isolated LXD Sandbox System Container..."
+    echo "INFO: Deploying GAIA into LXD container."
     if ! command -v lxc &> /dev/null; then
-        echo "❌ ERROR: LXD CLI utility not found on this system."
+        echo "ERROR: LXD CLI utility not found on this system."
         exit 1
     fi
 
     if [ -z "${LXD_TARBALL}" ]; then
         if ! lxc info gaia-runtime-sandbox >/dev/null 2>&1; then
-            echo "❌ ERROR: Portable archive 'gaia-desktop_${GAIA_VERSION}_LXD-sandbox.tar.gz' not found."
+            echo "ERROR: Portable archive 'gaia-desktop_${GAIA_VERSION}_LXD-sandbox.tar.gz' not found."
             exit 1
         fi
     else
@@ -146,13 +257,35 @@ elif [[ "$TOPOLOGY_CHOICE" == "2" ]]; then
         fi
     fi
 
-    echo "LOG: Mapping local host display socket channels directly into container frame..."
+    echo "INFO: Mapping host display socket into container."
     xhost +local: >/dev/null 2>&1 || true
     lxc config device remove gaia-runtime-sandbox X11-Display-Socket >/dev/null 2>&1 || true
     sudo mkdir -p /tmp/.X11-unix && sudo chmod 1777 /tmp/.X11-unix
     lxc config device add gaia-runtime-sandbox X11-Display-Socket disk source=/tmp/.X11-unix path=/tmp/.X11-unix
 
-    echo "LOG: Settling container subsystems..."
+    # Extract host and port from BACKEND_URL for conditional proxy setup
+    BACKEND_HOST_PORT="${BACKEND_URL#http://}"
+    BACKEND_HOST_PORT="${BACKEND_HOST_PORT#https://}"
+    BACKEND_HOST="${BACKEND_HOST_PORT%%:*}"  # everything before first colon
+    BACKEND_PORT="${BACKEND_HOST_PORT##*:}"  # everything after last colon
+    if [ "$BACKEND_PORT" = "$BACKEND_HOST_PORT" ]; then
+        BACKEND_PORT="13305"  # default port if not specified
+    fi
+
+    # Only add proxy device if backend is on localhost (isolated from container's localhost)
+    # For remote hosts/IPs, the container has direct network access via its normal interface
+    lxc config device remove gaia-runtime-sandbox lemonade-server >/dev/null 2>&1 || true
+    if [[ "$BACKEND_HOST" =~ ^(localhost|127\.0\.0\.1|::1)$ ]]; then
+        echo "INFO: Proxying Lemonade Server (${BACKEND_HOST}:${BACKEND_PORT}) into container."
+        lxc config device add gaia-runtime-sandbox lemonade-server proxy \
+            listen=tcp:${BACKEND_HOST}:${BACKEND_PORT} \
+            connect=tcp:${BACKEND_HOST}:${BACKEND_PORT} \
+            bind=container
+    else
+        echo "INFO: Backend URL is remote (${BACKEND_HOST}:${BACKEND_PORT}); container has direct network access."
+    fi
+
+    echo "INFO: Restarting container to apply updates."
     lxc restart gaia-runtime-sandbox
     sleep 3
 
@@ -171,7 +304,7 @@ EOF"
     fi
 
     echo "=========================================================================="
-    echo "🚀 BOOTING GAIA WORKSTATION VIA LXD CONTAINER SANDBOX"
+    echo "Starting GAIA in LXD container"
     echo "=========================================================================="
     lxc exec gaia-runtime-sandbox -- env \
         DISPLAY="${DISPLAY:-:0}" \
@@ -182,28 +315,37 @@ EOF"
         GAIA_ALLOWED_PATHS="${RESOLVED_HOST_PATH}" \
         /snap/bin/gaia-desktop --no-sandbox
 
+    # Create desktop launcher for LXD deployment
+    LXD_LAUNCHER_CMD="if ! lxc info gaia-runtime-sandbox >/dev/null 2>&1; then echo 'LXD container not found. Run install_gaia.sh first.'; exit 1; fi; lxc start gaia-runtime-sandbox 2>/dev/null || true; sleep 1; lxc exec gaia-runtime-sandbox -- env DISPLAY=\${DISPLAY:-:0} WAYLAND_DISPLAY=\${WAYLAND_DISPLAY} XDG_RUNTIME_DIR=/tmp /snap/bin/gaia-desktop --no-sandbox"
+    create_desktop_launcher "gaia-lxd" "$LXD_LAUNCHER_CMD" "GAIA Desktop (LXD Container)" "gaia"
+    echo "=========================================================================="
+    echo "✅ LXD deployment complete!"
+    echo "   GAIA is now available in your application menu as 'GAIA Desktop (LXD Container)'"
+    echo "   Or launch from terminal: gaia-lxd"
+    echo "=========================================================================="
+
 # ---------------------------------------------------------------------
-# OPTION 3: DEDICATED STANDALONE DESKTOP SANDBOX (DOCKER ENGINE)
+# OPTION 3: Docker container deployment
 # ---------------------------------------------------------------------
 elif [[ "$TOPOLOGY_CHOICE" == "3" ]]; then
     echo "====================================================================="
-    echo " LOG: Deploying Chiseled OCI Rock via Docker Engine..."
+    echo " Deploying GAIA OCI image via Docker"
     echo "====================================================================="
     if ! command -v docker &> /dev/null; then
-        echo "❌ ERROR: Docker CLI engine tool not found on this system."
+        echo "ERROR: Docker CLI tool not found on this system."
         exit 1
     fi
 
     if [ -n "${DOCKER_TARBALL}" ]; then
         if [ "$IS_REMOTE_MOUNT" = false ]; then
-            echo "LOG: Streaming archive directly onto local storage partition via rsync..."
+            echo "INFO: Staging Docker archive on local storage."
             rsync -ah --progress "${DOCKER_TARBALL}" /tmp/gaia-docker-stage.tar
             LOCAL_STAGE_FILE="/tmp/gaia-docker-stage.tar"
         else
             LOCAL_STAGE_FILE="$DOCKER_TARBALL"
         fi
 
-        echo "LOG: Loading native structural OCI-transposed archive image layout via socket pipe..."
+        echo "INFO: Loading Docker archive into local Docker daemon."
         cat "$LOCAL_STAGE_FILE" | docker load
 
         # Keep things clean on your laptop's local partition
@@ -211,7 +353,7 @@ elif [[ "$TOPOLOGY_CHOICE" == "3" ]]; then
     fi
 
     if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^gaia-desktop:${GAIA_VERSION}$"; then
-        echo "❌ ERROR: Image gaia-desktop:${GAIA_VERSION} was not registered inside your local daemon."
+        echo "ERROR: Image gaia-desktop:${GAIA_VERSION} is not present in local Docker daemon."
         exit 1
     fi
 
@@ -231,7 +373,7 @@ elif [[ "$TOPOLOGY_CHOICE" == "3" ]]; then
     [ -d "$RESOLVED_HOST_PATH" ] && VOLUME_MAPPING="-v $RESOLVED_HOST_PATH:$RESOLVED_HOST_PATH"
 
     echo "=========================================================================="
-    echo " 🚀 BOOTING GAIA DESKTOP APPLICATION VIA DOCKER PROCESS SANDBOX"
+    echo " Starting GAIA in Docker container"
     echo "=========================================================================="
     xhost +local:docker
 
@@ -260,28 +402,37 @@ elif [[ "$TOPOLOGY_CHOICE" == "3" ]]; then
         -e GAIA_ALLOWED_PATHS=\"${RESOLVED_HOST_PATH}\" \
         'gaia-desktop:${GAIA_VERSION}'"
 
-    echo "🎉 SUCCESS: Chiseled OCI Rock deployed via Docker process containment!"
+    echo "INFO: Docker deployment started."
+
+    # Create desktop launcher for Docker deployment
+    DOCKER_LAUNCHER_CMD="if ! docker inspect gaia-docker-sandbox >/dev/null 2>&1; then echo 'Docker container not found. Run install_gaia.sh first.'; exit 1; fi; docker start gaia-docker-sandbox 2>/dev/null || true; sleep 1; docker exec -it gaia-docker-sandbox /opt/gaia_runtime/opt/GAIA/gaia-desktop"
+    create_desktop_launcher "gaia-docker" "$DOCKER_LAUNCHER_CMD" "GAIA Desktop (Docker Container)" "gaia"
+    echo "=========================================================================="
+    echo "✅ Docker deployment complete!"
+    echo "   GAIA is now available in your application menu as 'GAIA Desktop (Docker Container)'"
+    echo "   Or launch from terminal: gaia-docker"
+    echo "=========================================================================="
 
 # ---------------------------------------------------------------------
-# OPTION 4: ROOTLESS APPLICATION PROCESS CONTAINER (PODMAN ENGINE)
+# OPTION 4: Podman container deployment
 # ---------------------------------------------------------------------
 elif [[ "$TOPOLOGY_CHOICE" == "4" ]]; then
-    echo "LOG: Deploying Rootless OCI Process Container Sandbox via Podman Engine..."
+    echo "INFO: Deploying GAIA via rootless Podman container."
     if ! command -v podman &> /dev/null; then
-        echo "❌ ERROR: Podman engine execution footprint not detected."
+        echo "ERROR: Podman CLI not detected."
         exit 1
     fi
 
     if [ -n "${DOCKER_TARBALL}" ]; then
         if [ "$IS_REMOTE_MOUNT" = false ]; then
-            echo "LOG: Streaming archive directly onto local storage partition via rsync..."
+            echo "INFO: Staging OCI archive on local storage."
             rsync -ah --progress "${DOCKER_TARBALL}" /tmp/gaia-podman-stage.tar
             LOCAL_STAGE_FILE="/tmp/gaia-podman-stage.tar"
         else
             LOCAL_STAGE_FILE="$DOCKER_TARBALL"
         fi
 
-        echo "LOG: Unpacking OCI-archive image structures natively via socket pipe..."
+        echo "INFO: Loading OCI archive into Podman image store."
         cat "$LOCAL_STAGE_FILE" | podman load
 
         [ "$IS_REMOTE_MOUNT" = false ] && rm -f /tmp/gaia-podman-stage.tar
@@ -311,16 +462,25 @@ elif [[ "$TOPOLOGY_CHOICE" == "4" ]]; then
         -e keys_serper=\"$SERPER_KEY\" \
         'gaia-desktop:${GAIA_VERSION}'"
 
-    echo "🎉 SUCCESS: OCI Rock deployed via Podman cleanly!"
+    echo "INFO: Podman deployment started."
+
+    # Create desktop launcher for Podman deployment
+    PODMAN_LAUNCHER_CMD="if ! podman inspect gaia-podman-sandbox >/dev/null 2>&1; then echo 'Podman container not found. Run install_gaia.sh first.'; exit 1; fi; podman start gaia-podman-sandbox 2>/dev/null || true; sleep 1; podman exec -it gaia-podman-sandbox /opt/gaia_runtime/opt/GAIA/gaia-desktop"
+    create_desktop_launcher "gaia-podman" "$PODMAN_LAUNCHER_CMD" "GAIA Desktop (Podman Container)" "gaia"
+    echo "=========================================================================="
+    echo "✅ Podman deployment complete!"
+    echo "   GAIA is now available in your application menu as 'GAIA Desktop (Podman Container)'"
+    echo "   Or launch from terminal: gaia-podman"
+    echo "=========================================================================="
 
 # ---------------------------------------------------------------------
-# OPTION 5: ENTERPRISE PRODUCTION ORCHESTRATION BLUEPRINT (KUBERNETES)
+# OPTION 5: Kubernetes manifest generation
 # ---------------------------------------------------------------------
 elif [[ "$TOPOLOGY_CHOICE" == "5" ]]; then
     echo "====================================================================="
-    echo " 🚀 KUBERNETES DEPLOYMENT MANIFEST ENGINE MANIFEST"
+    echo " Kubernetes deployment manifest"
     echo "====================================================================="
-    echo "To deploy your chiseled OCI Rock into Kubernetes, apply the manifest below."
+    echo "To deploy this image to Kubernetes, apply the manifest below."
     echo "Ensure you tag and push your image to your cluster's private container registry:"
     echo "   docker tag gaia-desktop:${GAIA_VERSION} internal-registry.local/gaia-desktop:${GAIA_VERSION}"
     echo "   docker push internal-registry.local/gaia-desktop:${GAIA_VERSION}"
