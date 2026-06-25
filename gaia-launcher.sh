@@ -92,9 +92,14 @@ echo "[CONFIG] Set max-steps to $GAIA_MAX_STEPS "
 export HTTP_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 export REBUILD_USER_AGENT="${HTTP_USER_AGENT}"
 
-TARGET_EXEC=$(find "$SNAP/opt/GAIA" -maxdepth 1 -type f -executable | head -n 1)
-if [ -z "$TARGET_EXEC" ]; then
-    echo "ERROR: Failed to locate core executable launcher binary inside packaged opt footprint tree." >&2
+# Select the desktop entrypoint deterministically; broad file scans can pick
+# non-launcher binaries in Electron bundles and fail with exec format errors.
+if [ -x "$SNAP/opt/GAIA/.gaia-desktop-bin" ]; then
+    TARGET_EXEC="$SNAP/opt/GAIA/.gaia-desktop-bin"
+elif [ -x "$SNAP/opt/GAIA/gaia-desktop" ]; then
+    TARGET_EXEC="$SNAP/opt/GAIA/gaia-desktop"
+else
+    echo "ERROR: Failed to locate GAIA desktop executable in $SNAP/opt/GAIA." >&2
     exit 1
 fi
 

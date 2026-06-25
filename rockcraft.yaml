@@ -3,7 +3,7 @@ summary: OCI container runtime for GAIA
 description: |
   OCI-compliant container packaging for the GAIA framework
   using a minimal runtime base.
-version: &global_version "0.21.2" # shared project version anchor
+version: &global_version "0.21.2"
 license: MIT
 
 base: bare
@@ -20,8 +20,7 @@ parts:
     build-packages:
       - squashfs-tools
     override-build: |
-      TARGET_VERSION=*global_version
-      echo "LOG: Preparing rock runtime layout for version: ${TARGET_VERSION}"
+      echo "LOG: Preparing rock runtime layout for version: ${CRAFT_PROJECT_VERSION:-unknown}"
        
       echo "LOG: Locating snap artifact in staging directory..."
       TARGET_SNAP=$(ls -t *.snap 2>/dev/null | head -n 1)
@@ -33,24 +32,90 @@ parts:
       unsquashfs -f -d "${CRAFT_STAGE}/app_root" "${TARGET_SNAP}"
        
       echo "LOG: Copying runtime files into final image layout..."
-      mkdir -p "${CRAFT_PART_INSTALL}/bin"
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/bin"
       mkdir -p "${CRAFT_PART_INSTALL}/opt/gaia_runtime"
        
-      cp -af "${CRAFT_STAGE}/app_root/bin/gaia-launcher.sh" "${CRAFT_PART_INSTALL}/bin/gaia-launcher"
+      cp -af "${CRAFT_STAGE}/app_root/bin/gaia-launcher.sh" "${CRAFT_PART_INSTALL}/usr/bin/gaia-launcher"
       cp -rf "${CRAFT_STAGE}/app_root/"* "${CRAFT_PART_INSTALL}/opt/gaia_runtime/"
+      
+      echo "LOG: Setting workspace permissions for non-root container execution..."
+      mkdir -p "${CRAFT_PART_INSTALL}/opt/gaia_runtime/workspace"
+      chmod -R 755 "${CRAFT_PART_INSTALL}/opt/gaia_runtime"
+      chmod 777 "${CRAFT_PART_INSTALL}/opt/gaia_runtime/workspace"
 
   # PART 2: Add minimal runtime dependencies
   system-dependencies:
     plugin: nil
     stage-packages:
+      - bash
+      - coreutils
+      - findutils
       - libc6
       - libstdc++6
-      - python3-minimal
+      - netcat-openbsd
+      - python3.12-full
+      # Electron runtime: GLib/GTK3
+      - libglib-2.0-0
+      - libgobject-2.0-0
+      - libgio-2.0-0
+      - libgtk-3-0
+      - libgdk-pixbuf-2.0-0
+      - libgdk-pixbuf2.0-bin
+      - libcanberra-gtk3-module
+      - shared-mime-info
+      # Electron runtime: NSS/NSPR
+      - libnspr4
+      - libnss3
+      # Electron runtime: DBus, Cups
+      - libdbus-1-3
+      - libcups2
+      # Electron runtime: Cairo/Pango
+      - libcairo2
+      - libcairo-gobject2
+      - libpango-1.0-0
+      - libpangocairo-1.0-0
+      - libpangoft2-1.0-0
+      # Electron runtime: X11 display
+      - libx11-6
+      - libxext6
+      - libxfixes3
+      - libxrandr2
+      - libxcomposite1
+      - libxdamage1
+      - libxrender1
+      - libxcb1
+      - libxcb-render0
+      - libxcb-shm0
+      - libxkbcommon0
+      - libxi6
+      # Electron runtime: Graphics (GBM/DRM)
+      - libgbm1
+      - libdrm2
+      - libepoxy0
+      # Electron runtime: Multimedia/Audio/Accessibility
+      - libasound2
+      - libatspi2.0-0
+      # Electron runtime: Fonts/Text rendering
+      - libfontconfig1
+      - libfreetype6
+      - libharfbuzz0b
+      - libfribidi0
+      - libthai0
+      - libpixman-1-0
+      - libpng16-16t64
+      # Electron runtime: System services
+      - libudev1
+      - libexpat1
+      - libkrb5-3
+      - libgnutls30
+      - libsystemd0
+      - libavahi-common3
+      - libavahi-client3
 
 services:
   gaia-service:
     override: replace
-    command: bin/gaia-launcher
+    command: /usr/bin/gaia-launcher
     working-dir: /opt/gaia_runtime
     environment:
       SNAP: /opt/gaia_runtime

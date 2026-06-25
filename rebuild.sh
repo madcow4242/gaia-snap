@@ -66,11 +66,11 @@ GLOBAL_START_TIME=$SECONDS
 # =====================================================================
 # Build configuration
 # =====================================================================
-export CRAFT_PARALLEL_BUILD_COUNT=2
+export CRAFT_PARALLEL_BUILD_COUNT=8
 
 # Optional host tuning commands (disabled by default)
-sudo apt install cpulimit
-powerprofilesctl set power-saver
+#sudo apt install cpulimit
+#powerprofilesctl set power-saver
 # powerprofilesctl set performance
 
 # =====================================================================
@@ -125,14 +125,16 @@ patch_file() {
     local file=$1 search=$2 replace=$3 label=$4
     if [ -f "$file" ]; then
         echo "INFO: Updating $file ($label) to: $GAIA_VERSION"
-        sed -i "s|$search|$replace|g" "$file"
+        # Escape & in replacement string since sed treats & as "matched string"
+        replace="${replace//&/\\&}"
+        sed -i "s|${search}|${replace}|g" "$file"
     else
         echo "WARNING: $file not found, skipping."
     fi
 }
 
 patch_file "snap/snapcraft.yaml" "VERSION_TAG=\".*\"" "VERSION_TAG=\"$GAIA_VERSION\"" "target version"
-patch_file "rockcraft.yaml" "version: &global_version \".*\"" "version: \&global_version \"$GAIA_VERSION\"" "anchor version"
+patch_file "rockcraft.yaml" 'version: &global_version "[^"]*"' "version: &global_version \"$GAIA_VERSION\"" "anchor version"
 patch_file "install_gaia.sh" "GAIA_VERSION=\".*\"" "GAIA_VERSION=\"$GAIA_VERSION\"" "target release"
 patch_file "README.md" "Current default GAIA version in rebuild.sh: [0-9.]*" "Current default GAIA version in rebuild.sh: $GAIA_VERSION" "documentation header"
 patch_file "gaia-launcher.sh" "version\": \".*\"" "version\": \"$GAIA_VERSION\"" "launcher json version"

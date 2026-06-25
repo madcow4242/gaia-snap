@@ -378,7 +378,7 @@ elif [[ "$TOPOLOGY_CHOICE" == "3" ]]; then
     echo "=========================================================================="
     xhost +local:docker
 
-    eval "docker run -d \
+    DOCKER_CONTAINER_ID=$(eval "docker run -d \
         --name gaia-docker-sandbox \
         --net=host \
         --ipc=host \
@@ -400,17 +400,44 @@ elif [[ "$TOPOLOGY_CHOICE" == "3" ]]; then
         -e keys_groq=\"$GROQ_KEY\" \
         -e keys_tavily=\"$TAVILY_KEY\" \
         -e keys_serper=\"$SERPER_KEY\" \
+        -e ALLOWED_PATHS=\"${RESOLVED_HOST_PATH}\" \
+        -e allowed_paths=\"${RESOLVED_HOST_PATH}\" \
         -e GAIA_ALLOWED_PATHS=\"${RESOLVED_HOST_PATH}\" \
-        'gaia-desktop:${GAIA_VERSION}'"
+        'gaia-desktop:${GAIA_VERSION}'")
+
+    if [ -z "$DOCKER_CONTAINER_ID" ]; then
+        echo "ERROR: Failed to launch Docker container gaia-docker-sandbox."
+        exit 1
+    fi
+
+    sleep 2
+
+    if ! docker ps --format '{{.Names}}' | grep -qx 'gaia-docker-sandbox'; then
+        echo "ERROR: Docker container gaia-docker-sandbox exited during startup."
+        echo "INFO: Recent container logs:"
+        docker logs --tail 120 gaia-docker-sandbox || true
+        exit 1
+    fi
+
+    if [ -n "$RESOLVED_HOST_PATH" ]; then
+        docker exec gaia-docker-sandbox /usr/bin/bash -lc "mkdir -p /opt/gaia_runtime/workspace/.gaia/cache && cat << 'EOF' > /opt/gaia_runtime/workspace/.gaia/cache/allowed_paths.json
+{
+  \"paths\": [
+    \"/root\",
+    \"${RESOLVED_HOST_PATH}\"
+  ]
+}
+EOF"
+    fi
 
     echo "INFO: Docker deployment started."
 
     # Create desktop launcher for Docker deployment
-    DOCKER_LAUNCHER_CMD="if ! docker inspect gaia-docker-sandbox >/dev/null 2>&1; then echo 'Docker container not found. Run install_gaia.sh first.'; exit 1; fi; docker start gaia-docker-sandbox 2>/dev/null || true; sleep 1; docker exec -it gaia-docker-sandbox /opt/gaia_runtime/opt/GAIA/gaia-desktop"
+    DOCKER_LAUNCHER_CMD="if ! docker inspect gaia-docker-sandbox >/dev/null 2>&1; then echo 'Docker container not found. Run install_gaia.sh first.'; exit 1; fi; docker start gaia-docker-sandbox 2>/dev/null || true; sleep 1; docker exec -it -e DISPLAY=\"\${DISPLAY}\" gaia-docker-sandbox /usr/bin/gaia-launcher"
     create_desktop_launcher "gaia-docker" "$DOCKER_LAUNCHER_CMD" "GAIA Desktop (Docker Container)" "" "GAIA-Docker"
     echo "=========================================================================="
     echo "✅ Docker deployment complete!"
-    echo "   GAIA is now available in your application menu as 'GAIA Desktop (Docker Container)'"
+    echo "   GAIA is now available in your application menu as 'GAIA-Docker'"
     echo "   Or launch from terminal: gaia-docker"
     echo "=========================================================================="
 
@@ -446,7 +473,7 @@ elif [[ "$TOPOLOGY_CHOICE" == "4" ]]; then
     [ -n "$HOST_PATH_TO_EXPOSE" ] && eval RESOLVED_HOST_PATH="$HOST_PATH_TO_EXPOSE"
     [ -d "$RESOLVED_HOST_PATH" ] && VOLUME_MAPPING="-v $RESOLVED_HOST_PATH:$RESOLVED_HOST_PATH:Z"
 
-    eval "podman run -d \
+    PODMAN_CONTAINER_ID=$(eval "podman run -d \
         --name gaia-podman-sandbox \
         --net=host \
         --ipc=host \
@@ -461,7 +488,20 @@ elif [[ "$TOPOLOGY_CHOICE" == "4" ]]; then
         -e keys_groq=\"$GROQ_KEY\" \
         -e keys_tavily=\"$TAVILY_KEY\" \
         -e keys_serper=\"$SERPER_KEY\" \
-        'gaia-desktop:${GAIA_VERSION}'"
+        'gaia-desktop:${GAIA_VERSION}'")
+
+    if [ -z "$PODMAN_CONTAINER_ID" ]; then
+        echo "ERROR: Failed to launch Podman container gaia-podman-sandbox."
+        exit 1
+    fi
+
+    sleep 2
+    if ! podman ps --format '{{.Names}}' | grep -qx 'gaia-podman-sandbox'; then
+        echo "ERROR: Podman container gaia-podman-sandbox exited during startup."
+        echo "INFO: Recent container logs:"
+        podman logs --tail 120 gaia-podman-sandbox || true
+        exit 1
+    fi
 
     echo "INFO: Podman deployment started."
 
@@ -470,7 +510,7 @@ elif [[ "$TOPOLOGY_CHOICE" == "4" ]]; then
     create_desktop_launcher "gaia-podman" "$PODMAN_LAUNCHER_CMD" "GAIA Desktop (Podman Container)" "" "GAIA-Podman"
     echo "=========================================================================="
     echo "✅ Podman deployment complete!"
-    echo "   GAIA is now available in your application menu as 'GAIA Desktop (Podman Container)'"
+    echo "   GAIA is now available in your application menu as 'GAIA-Podman'"
     echo "   Or launch from terminal: gaia-podman"
     echo "=========================================================================="
 
