@@ -78,6 +78,50 @@ parts:
        
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install "${CRAFT_PART_SRC}/cloned-framework/.[ui]"
 
+      # ------------------------------------------------------------------
+      # TEMP WORKAROUND (remove after upstream agent wheel publishing is fixed)
+      # Context: https://github.com/amd/gaia/issues/1568
+      # Purpose: Install agent packages directly from cloned GAIA source so
+      # browser-capable agents are present even when PyPI wheel publishing lags.
+      # Disable by setting GAIA_ENABLE_LOCAL_AGENT_WORKAROUND=0 in build env.
+      # ------------------------------------------------------------------
+      if [ "${GAIA_ENABLE_LOCAL_AGENT_WORKAROUND:-1}" = "1" ]; then
+        echo "LOG: TEMP workaround enabled: installing local GAIA agents from source tree."
+
+        AGENT_ROOT="${CRAFT_PART_SRC}/cloned-framework/hub/agents/python"
+        BROWSER_AGENT_INSTALLED=0
+
+        install_agent_if_present() {
+          local agent_dir="$1"
+          if [ -d "${AGENT_ROOT}/${agent_dir}" ]; then
+            echo "LOG: Installing local GAIA agent package: ${agent_dir}"
+            "${CRAFT_PART_INSTALL}/venv/bin/pip" install "${AGENT_ROOT}/${agent_dir}"
+            return 0
+          fi
+          return 1
+        }
+
+        # Browser/browser-lite naming has varied; install whichever exists.
+        for candidate in browser browser-lite browser_lite; do
+          if install_agent_if_present "${candidate}"; then
+            BROWSER_AGENT_INSTALLED=1
+          fi
+        done
+
+        if [ "${BROWSER_AGENT_INSTALLED}" -ne 1 ]; then
+          echo "ERROR: Local agent workaround enabled, but no browser agent package found."
+          echo "ERROR: Expected one of: ${AGENT_ROOT}/browser, browser-lite, browser_lite"
+          exit 1
+        fi
+
+        # Optional extras: install more local agents when present.
+        for optional_agent in analyst code connectors-demo docqa email routing docker fileio jira summarize sd blender emr; do
+          install_agent_if_present "${optional_agent}" || true
+        done
+      else
+        echo "LOG: TEMP local-agent workaround disabled (GAIA_ENABLE_LOCAL_AGENT_WORKAROUND=0)."
+      fi
+
   # PART 2: Extract desktop UI artifact
   gaia-desktop:
     plugin: nil
@@ -111,10 +155,12 @@ parts:
     stage:
       - bin/gaia-launcher.sh
       - lib/python_patches/sitecustomize.py
+      - lib/python_patches/network_reliability.py
       - snap/hooks/configure
     prime:
       - bin/gaia-launcher.sh
       - lib/python_patches/sitecustomize.py
+      - lib/python_patches/network_reliability.py
       - snap/hooks/configure
       - -*.snap
       - -*.tar
@@ -132,6 +178,7 @@ parts:
        
       cp -av "${CRAFT_PART_SRC}/gaia-launcher.sh" "${CRAFT_PART_INSTALL}/bin/gaia-launcher.sh"
       cp -av "${CRAFT_PART_SRC}/_gaia_sandbox_patch.py" "${CRAFT_PART_INSTALL}/lib/python_patches/sitecustomize.py"
+      cp -av "${CRAFT_PART_SRC}/_gaia_network_reliability.py" "${CRAFT_PART_INSTALL}/lib/python_patches/network_reliability.py"
       cp -av "${CRAFT_PART_SRC}/snap/hooks/configure" "${CRAFT_PART_INSTALL}/snap/hooks/configure"
 
   deps:
@@ -139,3 +186,10 @@ parts:
     build-attributes: [ enable-patchelf ]
     stage-packages:
       - ocrmypdf
+      # Tier-2.5 text-browser retrieval: lightweight fallback for server-rendered
+      # HTML that blocks raw Python HTTP. Both are headless and work without a
+      # display server in all topologies (snap, OCI, Docker, LXD, Podman).
+      # Empty-page detection in _gaia_network_reliability.py escalates to Tier-3
+      # (full Chromium) automatically when these return useless content.
+      - lynx
+      - w3m

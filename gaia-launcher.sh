@@ -92,6 +92,21 @@ echo "[CONFIG] Set max-steps to $GAIA_MAX_STEPS "
 export HTTP_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 export REBUILD_USER_AGENT="${HTTP_USER_AGENT}"
 
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+        cat <<'EOF'
+Usage: gaia-desktop
+
+Launches the GAIA desktop application from the snap runtime.
+
+Environment toggles:
+    GAIA_DEBUG=1                 Enable launcher debug logging
+    GAIA_HOME=/path              Override GAIA home directory (default ~/.gaia)
+    GAIA_MAX_STEPS=<int>         Override backend max steps
+    GAIA_DISABLE_UPDATE=1        Disable auto-update checks (default in snap)
+EOF
+        exit 0
+fi
+
 # Select the desktop entrypoint deterministically; broad file scans can pick
 # non-launcher binaries in Electron bundles and fail with exec format errors.
 if [ -x "$SNAP/opt/GAIA/.gaia-desktop-bin" ]; then
@@ -111,7 +126,7 @@ fi
 if [ "$(id -u)" -ne 0 ]; then
     if [ -n "${GAIA_HOME}" ] && [ "${GAIA_HOME}" != "/" ] && [ "${GAIA_HOME}" != "/home" ]; then
         echo "INFO: Ensuring user ownership of ${GAIA_HOME}."
-        sudo chown -R "$(id -u):$(id -g)" "${GAIA_HOME}" 2>/dev/null || true
+        sudo -n chown -R "$(id -u):$(id -g)" "${GAIA_HOME}" 2>/dev/null || true
     else
         echo "ERROR: GAIA_HOME target path is invalid or unbound! Aborting ownership sync to protect host."
         exit 1
@@ -145,19 +160,48 @@ if [ "\$1" = "chat" ]; then
         fi
     done
 
-    # Absolute fallback routing drop-out preventing cyclic interpreter wrapper loops
+    # Absolute fallback routing drop-out preventing cyclic interpreter wrapper loops.
+    # Run child in background so we can probe readiness, but forward termination
+    # signals to avoid orphaning the backend process on GUI exit.
     "${SNAP}/venv/bin/python3" "${SNAP}/venv/bin/gaia" "\$@" &
     BACKEND_PID=\$!
 
+    _forward_exit() {
+        kill "\$BACKEND_PID" 2>/dev/null || true
+        wait "\$BACKEND_PID" 2>/dev/null || true
+        exit 0
+    }
+    trap _forward_exit INT TERM
+
     timeout=40
-    # Clean evaluation string ensures nc interprets an exact integer port
-    while ! nc -z 127.0.0.1 "\$DYNAMIC_PORT" && [ \$timeout -gt 0 ]; do
+    # Probe backend readiness without external netcat dependency.
+    while [ \$timeout -gt 0 ]; do
+        if "${SNAP}/venv/bin/python3" - "\$DYNAMIC_PORT" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.settimeout(0.2)
+try:
+    sock.connect(("127.0.0.1", port))
+except OSError:
+    sys.exit(1)
+finally:
+    sock.close()
+sys.exit(0)
+PY
+        then
+            break
+        fi
         sleep 0.2
         timeout=\$((timeout - 1))
     done
 
     wait \$BACKEND_PID
-    exit \$?
+    BACKEND_STATUS=\$?
+    trap - INT TERM
+    exit \$BACKEND_STATUS
 fi
 
 exec "${SNAP}/venv/bin/gaia" "\$@"

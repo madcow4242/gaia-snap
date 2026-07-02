@@ -82,14 +82,27 @@ VERSION_CACHE_FILE=".last_version"
 GAIA_VERSION=""
 
 # 1. Parse incoming command-line arguments
+# Supports both forms:
+#   --gaia-version=0.21.2
+#   --gaia-version 0.21.2
 TEMP_ARGS=()
-for arg in "$@"; do
-    case $arg in
+while [ $# -gt 0 ]; do
+    case "$1" in
         --gaia-version=*)
-            GAIA_VERSION="${arg#*=}"
+            GAIA_VERSION="${1#*=}"
+            shift
+            ;;
+        --gaia-version)
+            if [ $# -lt 2 ]; then
+                echo "ERROR: --gaia-version requires a value (example: --gaia-version 0.21.2)." >&2
+                exit 1
+            fi
+            GAIA_VERSION="$2"
+            shift 2
             ;;
         *)
-            TEMP_ARGS+=("$arg")
+            TEMP_ARGS+=("$1")
+            shift
             ;;
     esac
 done
@@ -117,6 +130,29 @@ echo "INFO: Starting build pipeline for GAIA version: $GAIA_VERSION"
 # Validate version format and required tools before proceeding
 validate_version_format "$GAIA_VERSION"
 validate_required_tools
+
+# =====================================================================
+# HELPER: Clear stale snapcraft LXD instances for this project
+# =====================================================================
+cleanup_stale_snapcraft_instances() {
+    if ! command -v lxc &>/dev/null; then
+        return 0
+    fi
+
+    mapfile -t stale_instances < <(
+        lxc list --project snapcraft --format csv -c n 2>/dev/null \
+            | grep '^snapcraft-gaia-desktop-amd64-' || true
+    )
+
+    if [ ${#stale_instances[@]} -eq 0 ]; then
+        return 0
+    fi
+
+    echo "INFO: Removing stale snapcraft instances: ${stale_instances[*]}"
+    for instance in "${stale_instances[@]}"; do
+        lxc delete --project snapcraft "$instance" --force >/dev/null 2>&1 || true
+    done
+}
 
 # =====================================================================
 # UNIFIED METADATA PATCHING MATRIX (DRY LOOP)
@@ -159,7 +195,7 @@ else
             --oci)    BUILD_OCI=true ;;
             --docker) BUILD_DOCKER=true ;;
             --lxd)    BUILD_LXD=true ;;
-            *) echo "ERROR: Unknown parameter: $1. Valid flags: --snap, --oci, --docker, --lxd" >&2; exit 1 ;;
+            *) echo "ERROR: Unknown parameter: $1. Valid flags: --snap, --oci, --docker, --lxd, --gaia-version[=]X.Y.Z" >&2; exit 1 ;;
         esac
         shift
     done
@@ -180,6 +216,7 @@ if [ "$BUILD_SNAP" = true ]; then
     sudo rm -f *.snap
     sudo snapcraft clean gaia-desktop --step=prime >/dev/null 2>&1 || true
     sudo snapcraft clean gaia-backend --step=prime >/dev/null 2>&1 || true
+    sudo snapcraft clean gaia-sideloads --step=prime >/dev/null 2>&1 || true
 fi
 
 if [ "$BUILD_OCI" = true ] || [ "$BUILD_DOCKER" = true ]; then
@@ -210,6 +247,9 @@ TIME_LXD="Skipped"
 if [ "$BUILD_SNAP" = true ] || [ "$BUILD_OCI" = true ] || [ "$BUILD_DOCKER" = true ]; then
     START_SNAP=$SECONDS
     echo "INFO: Building Snap package from workspace."
+
+    # Prevent stale managed-instance/device conflicts from prior interrupted builds.
+    cleanup_stale_snapcraft_instances
 
     # Ensure launcher has executable permissions in place natively
     chmod +x gaia-launcher.sh
@@ -303,28 +343,12 @@ if [ "$BUILD_LXD" = true ]; then
     lxc launch ubuntu:24.04 gaia-worker -c security.nesting=true -c security.privileged=false
     lxc config device add gaia-worker GPU gpu gid=44 >/dev/null 2>&1 || true
 
-    lxc config device add gaia-worker X0 proxy \
-        listen=unix:@/tmp/.X11-unix/X0 \
-        connect=unix:@/tmp/.X11-unix/X0 \
-        bind=container security.uid=0 security.gid=0 >/dev/null 2>&1 || true
-
-    # Add Lemonade Server proxy (configurable via LEMONADE_URL env var, defaults to localhost:13305)
-    LEMONADE_URL="${LEMONADE_URL:-http://127.0.0.1:13305}"
-    LEMONADE_HOST_PORT="${LEMONADE_URL#http://}"
-    LEMONADE_HOST_PORT="${LEMONADE_HOST_PORT#https://}"
-    LEMONADE_HOST="${LEMONADE_HOST_PORT%%:*}"
-    LEMONADE_PORT="${LEMONADE_HOST_PORT##*:}"
-    if [ "$LEMONADE_PORT" = "$LEMONADE_HOST_PORT" ]; then
-        LEMONADE_PORT="13305"
-    fi
-
-    lxc config device add gaia-worker lemonade-server proxy \
-        listen=tcp:${LEMONADE_HOST}:${LEMONADE_PORT} \
-        connect=tcp:${LEMONADE_HOST}:${LEMONADE_PORT} \
-        bind=container >/dev/null 2>&1 || true
-
     lxc exec gaia-worker -- apt-get update -y >/dev/null 2>&1
+    lxc exec gaia-worker -- apt-get install -y wget ca-certificates >/dev/null 2>&1
+    lxc exec gaia-worker -- sh -c "wget -qO /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
     lxc exec gaia-worker -- apt-get install -y \
+        /tmp/google-chrome-stable_current_amd64.deb \
+        lynx w3m \
         snapd libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 \
         libgl1 libgtk-3-0 libasound2t64 libnspr4 libnss3 >/dev/null 2>&1
 

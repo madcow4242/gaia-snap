@@ -25,6 +25,83 @@ check_distro() {
 check_distro
 
 # =====================================================================
+# HELPER: Pre-flight cleanup of orphaned GAIA snaps and processes
+# =====================================================================
+cleanup_gaia_environment() {
+    echo "INFO: Checking for existing GAIA installations and orphaned processes..."
+    
+    # Kill any running GAIA processes
+    if pgrep -f "gaia-desktop|\.gaia-desktop-bin|gaia chat --ui" >/dev/null 2>&1; then
+        echo "INFO: Terminating running GAIA processes..."
+        pkill -9 gaia-desktop 2>/dev/null || true
+        pkill -9 -f "\.gaia-desktop-bin" 2>/dev/null || true
+        pkill -9 -f "gaia chat --ui" 2>/dev/null || true
+        sleep 1
+    fi
+    
+    # Remove existing gaia-desktop snap with --purge to clean data
+    if snap list gaia-desktop >/dev/null 2>&1; then
+        echo "INFO: Removing existing gaia-desktop snap (--purge)..."
+        sudo snap remove --purge gaia-desktop 2>/dev/null || true
+        sleep 2
+    fi
+    
+    # Clean up home directory state
+    if [ -d ~/.gaia ]; then
+        echo "INFO: Cleaning up ~/.gaia configuration directory..."
+        rm -rf ~/.gaia || true
+    fi
+    
+    echo "✅ Environment cleanup complete"
+}
+
+# =====================================================================
+# HELPER: Pre-flight cleanup for LXD topology
+# =====================================================================
+cleanup_lxd_environment() {
+    echo "INFO: Checking for existing LXD GAIA container..."
+
+    if lxc info gaia-runtime-sandbox >/dev/null 2>&1; then
+        echo "INFO: Stopping gaia-runtime-sandbox container..."
+        lxc stop gaia-runtime-sandbox 2>/dev/null || true
+        sleep 1
+        echo "INFO: Deleting gaia-runtime-sandbox container..."
+        lxc delete gaia-runtime-sandbox --force 2>/dev/null || true
+    fi
+
+    echo "✅ LXD cleanup complete"
+}
+
+# =====================================================================
+# HELPER: Pre-flight cleanup for Docker/Podman topologies
+# =====================================================================
+cleanup_container_environment() {
+    local RUNTIME="$1"  # docker | podman
+    local CONTAINER_NAME=""
+
+    if [[ "$RUNTIME" == "docker" ]]; then
+        CONTAINER_NAME="gaia-docker-sandbox"
+    elif [[ "$RUNTIME" == "podman" ]]; then
+        CONTAINER_NAME="gaia-podman-sandbox"
+    else
+        echo "WARNING: Unknown container runtime '$RUNTIME'; skipping cleanup"
+        return 0
+    fi
+
+    echo "INFO: Checking for existing $RUNTIME GAIA container..."
+
+    if $RUNTIME inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+        echo "INFO: Stopping $RUNTIME container $CONTAINER_NAME..."
+        $RUNTIME stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
+        sleep 1
+        echo "INFO: Removing $RUNTIME container $CONTAINER_NAME..."
+        $RUNTIME rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    fi
+
+    echo "✅ $RUNTIME cleanup complete"
+}
+
+# =====================================================================
 # HELPER: Create desktop application launcher
 # =====================================================================
 create_desktop_launcher() {
@@ -138,6 +215,15 @@ read -p " Enter Groq API Key (Optional / Leave Blank): " GROQ_KEY
 read -p " Enter Tavily Search API Key (Optional / Leave Blank): " TAVILY_KEY
 read -p " Enter Serper Search API Key (Optional / Leave Blank): " SERPER_KEY
 
+# Diagnostics toggle for runtime network reliability hooks
+GAIA_NETWORK_RELIABILITY_LOG="1"
+if [[ "$TOPOLOGY_CHOICE" =~ ^(2|3|4)$ ]]; then
+    read -p " Enable network reliability diagnostics logging? (Y/n): " RELIABILITY_LOG_CHOICE
+    if [[ "$RELIABILITY_LOG_CHOICE" =~ ^[Nn]$ ]]; then
+        GAIA_NETWORK_RELIABILITY_LOG="0"
+    fi
+fi
+
 EXPOSE_HOST_DIR="n"
 HOST_PATH_TO_EXPOSE=""
 if [[ "$TOPOLOGY_CHOICE" =~ ^(2|3|4)$ ]]; then
@@ -176,14 +262,14 @@ if [[ "$WORKSPACE_DIR" == /mnt/userver* ]]; then
 fi
 
 # Locate local artifacts cleanly within the absolute workspace context
-SNAP_PACKAGE=$(ls "${WORKSPACE_DIR}"/*.snap 2>/dev/null | head -n 1 || true)
-LXD_TARBALL=$(ls "${WORKSPACE_DIR}"/*LXD-sandbox.tar.gz 2>/dev/null | head -n 1 || true)
+SNAP_PACKAGE=$(ls -t "${WORKSPACE_DIR}"/*.snap 2>/dev/null | head -n 1 || true)
+LXD_TARBALL=$(ls -t "${WORKSPACE_DIR}"/*LXD-sandbox.tar.gz 2>/dev/null | head -n 1 || true)
 
 # Resolve target container pathing based on current topology placement
 if [ "$IS_REMOTE_MOUNT" = true ]; then
     DOCKER_TARBALL="$LOCAL_TAR_STAGE"
 else
-    DOCKER_TARBALL=$(ls "${WORKSPACE_DIR}"/*docker-image.tar 2>/dev/null | head -n 1 || true)
+    DOCKER_TARBALL=$(ls -t "${WORKSPACE_DIR}"/*docker-image.tar 2>/dev/null | head -n 1 || true)
 fi
 
 # =====================================================================
@@ -195,6 +281,7 @@ fi
 # ---------------------------------------------------------------------
 if [[ "$TOPOLOGY_CHOICE" == "1" ]]; then
     echo "INFO: Installing GAIA as a native Snap."
+    cleanup_gaia_environment
     if [ -z "$SNAP_PACKAGE" ]; then
         echo "ERROR: No local .snap artifact found in the working directory."
         exit 1
@@ -214,7 +301,7 @@ if [[ "$TOPOLOGY_CHOICE" == "1" ]]; then
     echo "=========================================================================="
     echo "✅ Snap deployment complete!"
     echo "   GAIA is now available in your application menu with system tray integration."
-    echo "   Search for 'GAIA' in the application launcher, or run: snap run gaia-desktop"
+    echo "   Search for 'GAIA' in the application launcher, or run: gaia-desktop"
     echo "=========================================================================="
 
 # ---------------------------------------------------------------------
@@ -222,6 +309,7 @@ if [[ "$TOPOLOGY_CHOICE" == "1" ]]; then
 # ---------------------------------------------------------------------
 elif [[ "$TOPOLOGY_CHOICE" == "2" ]]; then
     echo "INFO: Deploying GAIA into LXD container."
+    cleanup_lxd_environment
     if ! command -v lxc &> /dev/null; then
         echo "ERROR: LXD CLI utility not found on this system."
         exit 1
@@ -260,6 +348,7 @@ elif [[ "$TOPOLOGY_CHOICE" == "2" ]]; then
 
     echo "INFO: Mapping host display socket into container."
     xhost +local: >/dev/null 2>&1 || true
+    lxc config device remove gaia-runtime-sandbox X0 >/dev/null 2>&1 || true
     lxc config device remove gaia-runtime-sandbox X11-Display-Socket >/dev/null 2>&1 || true
     sudo mkdir -p /tmp/.X11-unix && sudo chmod 1777 /tmp/.X11-unix
     lxc config device add gaia-runtime-sandbox X11-Display-Socket disk source=/tmp/.X11-unix path=/tmp/.X11-unix
@@ -311,6 +400,7 @@ EOF"
         DISPLAY="${DISPLAY:-:0}" \
         WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
         XDG_RUNTIME_DIR="/tmp" \
+        GAIA_NETWORK_RELIABILITY_LOG="${GAIA_NETWORK_RELIABILITY_LOG}" \
         ALLOWED_PATHS="${RESOLVED_HOST_PATH}" \
         allowed_paths="${RESOLVED_HOST_PATH}" \
         GAIA_ALLOWED_PATHS="${RESOLVED_HOST_PATH}" \
@@ -322,7 +412,7 @@ EOF"
     echo "=========================================================================="
     echo "✅ LXD deployment complete!"
     echo "   GAIA is now available in your application menu as 'GAIA Desktop (LXD Container)'"
-    echo "   Or launch from terminal: gaia-lxd"
+    echo "   Launch from terminal shortcut: gaia-lxd"
     echo "=========================================================================="
 
 # ---------------------------------------------------------------------
@@ -332,6 +422,7 @@ elif [[ "$TOPOLOGY_CHOICE" == "3" ]]; then
     echo "====================================================================="
     echo " Deploying GAIA OCI image via Docker"
     echo "====================================================================="
+    cleanup_container_environment "docker"
     if ! command -v docker &> /dev/null; then
         echo "ERROR: Docker CLI tool not found on this system."
         exit 1
@@ -400,6 +491,7 @@ elif [[ "$TOPOLOGY_CHOICE" == "3" ]]; then
         -e keys_groq=\"$GROQ_KEY\" \
         -e keys_tavily=\"$TAVILY_KEY\" \
         -e keys_serper=\"$SERPER_KEY\" \
+        -e GAIA_NETWORK_RELIABILITY_LOG=\"${GAIA_NETWORK_RELIABILITY_LOG}\" \
         -e ALLOWED_PATHS=\"${RESOLVED_HOST_PATH}\" \
         -e allowed_paths=\"${RESOLVED_HOST_PATH}\" \
         -e GAIA_ALLOWED_PATHS=\"${RESOLVED_HOST_PATH}\" \
@@ -433,12 +525,12 @@ EOF"
     echo "INFO: Docker deployment started."
 
     # Create desktop launcher for Docker deployment
-    DOCKER_LAUNCHER_CMD="if ! docker inspect gaia-docker-sandbox >/dev/null 2>&1; then echo 'Docker container not found. Run install_gaia.sh first.'; exit 1; fi; docker start gaia-docker-sandbox 2>/dev/null || true; sleep 1; docker exec -it -e DISPLAY=\"\${DISPLAY}\" gaia-docker-sandbox /usr/bin/gaia-launcher"
+    DOCKER_LAUNCHER_CMD="if ! docker inspect gaia-docker-sandbox >/dev/null 2>&1; then echo 'Docker container not found. Run install_gaia.sh first.'; exit 1; fi; docker start gaia-docker-sandbox 2>/dev/null || true; sleep 1; docker exec -e DISPLAY=\"\${DISPLAY}\" gaia-docker-sandbox /usr/bin/gaia-launcher"
     create_desktop_launcher "gaia-docker" "$DOCKER_LAUNCHER_CMD" "GAIA Desktop (Docker Container)" "" "GAIA-Docker"
     echo "=========================================================================="
     echo "✅ Docker deployment complete!"
     echo "   GAIA is now available in your application menu as 'GAIA-Docker'"
-    echo "   Or launch from terminal: gaia-docker"
+    echo "   Launch from terminal shortcut: gaia-docker"
     echo "=========================================================================="
 
 # ---------------------------------------------------------------------
@@ -446,6 +538,7 @@ EOF"
 # ---------------------------------------------------------------------
 elif [[ "$TOPOLOGY_CHOICE" == "4" ]]; then
     echo "INFO: Deploying GAIA via rootless Podman container."
+    cleanup_container_environment "podman"
     if ! command -v podman &> /dev/null; then
         echo "ERROR: Podman CLI not detected."
         exit 1
@@ -466,21 +559,42 @@ elif [[ "$TOPOLOGY_CHOICE" == "4" ]]; then
         [ "$IS_REMOTE_MOUNT" = false ] && rm -f /tmp/gaia-podman-stage.tar
     fi
 
+    # Prevent Podman from auto-restarting containers after they are closed.
+    sudo systemctl disable --now podman-restart.service >/dev/null 2>&1 || true
+
     podman rm -f gaia-podman-sandbox >/dev/null 2>&1 || true
     xhost +local:root >/dev/null 2>&1 || true
 
+    DISPLAY_FLAGS="-e DISPLAY=$DISPLAY"
+    if [ -n "$WAYLAND_DISPLAY" ]; then
+        DISPLAY_FLAGS="-e DISPLAY=$DISPLAY -e WAYLAND_DISPLAY=$WAYLAND_DISPLAY -e XDG_RUNTIME_DIR=/tmp -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/$WAYLAND_DISPLAY:ro"
+    else
+        sudo mkdir -p /tmp/.X11-unix && sudo chmod 1777 /tmp/.X11-unix
+        DISPLAY_FLAGS="-e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix:ro"
+    fi
+
     VOLUME_MAPPING=""
     [ -n "$HOST_PATH_TO_EXPOSE" ] && eval RESOLVED_HOST_PATH="$HOST_PATH_TO_EXPOSE"
-    [ -d "$RESOLVED_HOST_PATH" ] && VOLUME_MAPPING="-v $RESOLVED_HOST_PATH:$RESOLVED_HOST_PATH:Z"
+    [ -d "$RESOLVED_HOST_PATH" ] && VOLUME_MAPPING="-v $RESOLVED_HOST_PATH:$RESOLVED_HOST_PATH"
 
     PODMAN_CONTAINER_ID=$(eval "podman run -d \
         --name gaia-podman-sandbox \
+        --restart=no \
+        --userns=keep-id \
         --net=host \
         --ipc=host \
+        --user $(id -u):$(id -g) \
+        --device /dev/dri:/dev/dri \
         --security-opt label=disable \
-        -e DISPLAY=$DISPLAY \
-        -v /tmp/.X11-unix:/tmp/.X11-unix:ro \
+        $DISPLAY_FLAGS \
         $VOLUME_MAPPING \
+        -e SNAP=\"/opt/gaia_runtime\" \
+        -e TARGET_EXEC=\"/opt/gaia_runtime/opt/GAIA/gaia-desktop\" \
+        -e HOME=\"/opt/gaia_runtime/workspace\" \
+        -e GAIA_HOME=\"/opt/gaia_runtime/workspace/.gaia\" \
+        -e TMPDIR=\"/opt/gaia_runtime/workspace/tmp\" \
+        -e DISPLAY=\"$DISPLAY\" \
+        -e WAYLAND_DISPLAY=\"$WAYLAND_DISPLAY\" \
         -e backend_url=\"$BACKEND_URL\" \
         -e backend_maxsteps=\"$AGENT_STEPS\" \
         -e keys_openai=\"$OPENAI_KEY\" \
@@ -488,6 +602,10 @@ elif [[ "$TOPOLOGY_CHOICE" == "4" ]]; then
         -e keys_groq=\"$GROQ_KEY\" \
         -e keys_tavily=\"$TAVILY_KEY\" \
         -e keys_serper=\"$SERPER_KEY\" \
+        -e GAIA_NETWORK_RELIABILITY_LOG=\"${GAIA_NETWORK_RELIABILITY_LOG}\" \
+        -e ALLOWED_PATHS=\"${RESOLVED_HOST_PATH}\" \
+        -e allowed_paths=\"${RESOLVED_HOST_PATH}\" \
+        -e GAIA_ALLOWED_PATHS=\"${RESOLVED_HOST_PATH}\" \
         'gaia-desktop:${GAIA_VERSION}'")
 
     if [ -z "$PODMAN_CONTAINER_ID" ]; then
@@ -503,15 +621,26 @@ elif [[ "$TOPOLOGY_CHOICE" == "4" ]]; then
         exit 1
     fi
 
+        if [ -n "$RESOLVED_HOST_PATH" ]; then
+                podman exec gaia-podman-sandbox /usr/bin/bash -lc "mkdir -p /opt/gaia_runtime/workspace/.gaia/cache && cat << 'EOF' > /opt/gaia_runtime/workspace/.gaia/cache/allowed_paths.json
+{
+    \"paths\": [
+        \"/root\",
+        \"${RESOLVED_HOST_PATH}\"
+    ]
+}
+EOF"
+        fi
+
     echo "INFO: Podman deployment started."
 
     # Create desktop launcher for Podman deployment
-    PODMAN_LAUNCHER_CMD="if ! podman inspect gaia-podman-sandbox >/dev/null 2>&1; then echo 'Podman container not found. Run install_gaia.sh first.'; exit 1; fi; podman start gaia-podman-sandbox 2>/dev/null || true; sleep 1; podman exec -it gaia-podman-sandbox /opt/gaia_runtime/opt/GAIA/gaia-desktop"
+        PODMAN_LAUNCHER_CMD="if ! podman inspect gaia-podman-sandbox >/dev/null 2>&1; then echo 'Podman container not found. Run install_gaia.sh first.'; exit 1; fi; podman start gaia-podman-sandbox 2>/dev/null || true; sleep 1; podman exec -e DISPLAY=\"\${DISPLAY}\" gaia-podman-sandbox /usr/bin/gaia-launcher"
     create_desktop_launcher "gaia-podman" "$PODMAN_LAUNCHER_CMD" "GAIA Desktop (Podman Container)" "" "GAIA-Podman"
     echo "=========================================================================="
     echo "✅ Podman deployment complete!"
     echo "   GAIA is now available in your application menu as 'GAIA-Podman'"
-    echo "   Or launch from terminal: gaia-podman"
+    echo "   Launch from terminal shortcut: gaia-podman"
     echo "=========================================================================="
 
 # ---------------------------------------------------------------------

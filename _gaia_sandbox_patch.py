@@ -8,6 +8,11 @@ import sys
 import ctypes
 import threading  # Global tracking anchor
 
+
+def _env_flag(name, default="1"):
+    value = os.environ.get(name, default)
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
 # ctypes loader override for missing optional shared libraries
 _original_cdll = ctypes.CDLL
 
@@ -42,6 +47,46 @@ except (ImportError, AttributeError):
 # Disable updater behavior in packaged environment
 os.environ["GAIA_DISABLE_UPDATE"] = "1"
 os.environ["GAIA_DISABLE_UPDATE_CHECK"] = "true"
+
+# Optional network reliability transport hooks.
+# Set GAIA_ENABLE_NETWORK_RELIABILITY=0 to disable this patch family.
+if _env_flag("GAIA_ENABLE_NETWORK_RELIABILITY", "1"):
+    try:
+        from network_reliability import install_network_reliability
+
+        install_network_reliability()
+    except (ImportError, AttributeError, ModuleNotFoundError) as net_patch_err:
+        sys.stderr.write(f"WARNING: Network reliability hooks not installed: {net_patch_err}\n")
+        sys.stderr.flush()
+
+
+# Ensure agent fallback model does not silently jump to heavyweight 35B.
+# Upstream may invoke Agent(..., model_id=None) on some flows, which currently
+# defaults to Qwen3.5-35B-A3B-GGUF in Agent.__init__. This patch keeps fallback
+# aligned with the configured/default runtime model unless explicitly disabled.
+if _env_flag("GAIA_ENFORCE_DEFAULT_MODEL_FALLBACK", "1"):
+    try:
+        from gaia.agents.base.agent import Agent
+        from gaia.llm.lemonade_client import DEFAULT_MODEL_NAME
+
+        _original_agent_init = Agent.__init__
+
+        def patched_agent_init(self, *args, **kwargs):
+            if kwargs.get("model_id") is None:
+                # Priority: explicit override -> Lemonade env model -> GAIA default.
+                forced_model = (
+                    os.environ.get("GAIA_FORCED_AGENT_MODEL")
+                    or os.environ.get("LEMONADE_MODEL")
+                    or DEFAULT_MODEL_NAME
+                )
+                kwargs["model_id"] = forced_model
+            return _original_agent_init(self, *args, **kwargs)
+
+        Agent.__init__ = patched_agent_init
+        print("INFO: Agent fallback model patch installed.", flush=True)
+    except (ImportError, AttributeError, ModuleNotFoundError) as model_patch_err:
+        sys.stderr.write(f"WARNING: Agent fallback model patch not installed: {model_patch_err}\n")
+        sys.stderr.flush()
 
 PENDING_TICKETS = {}
 TICKET_LOCK = threading.Lock()

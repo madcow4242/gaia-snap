@@ -54,6 +54,14 @@ parts:
       - libstdc++6
       - netcat-openbsd
       - python3.12-full
+      # Tier-2.5/3 fallback browsers: network reliability tier escalation
+      # lynx: lightweight text-browser for JavaScript-free content retrieval
+      # chrome: full rendering engine when lynx returns empty/useless content
+      - lynx
+      - w3m
+      - xdg-utils
+      - libu2f-udev
+      - fonts-liberation
       # Electron runtime: GLib/GTK3
       - libglib-2.0-0
       - libgobject-2.0-0
@@ -111,6 +119,18 @@ parts:
       - libsystemd0
       - libavahi-common3
       - libavahi-client3
+
+  # PART 3: Install a real Chrome binary for Tier-3 fallback inside OCI/LXD/Docker.
+  # chromium-browser on Ubuntu is often a snap wrapper and is not runnable in OCI.
+  browser-runtime:
+    plugin: nil
+    build-packages:
+      - wget
+    override-build: |
+      set -e
+      CHROME_DEB="${CRAFT_PART_BUILD}/google-chrome-stable_current_amd64.deb"
+      wget -qO "${CHROME_DEB}" "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+      dpkg-deb -x "${CHROME_DEB}" "${CRAFT_PART_INSTALL}"
 
 services:
   gaia-service:

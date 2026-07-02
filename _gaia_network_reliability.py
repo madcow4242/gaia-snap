@@ -121,9 +121,25 @@ def _safe_domain_str(domain):
     return domain or "-"
 
 
+def _is_chromium_snap_wrapper(path):
+    """Detect Ubuntu chromium-browser wrapper scripts that require snapd.
+
+    These wrappers are executable files but not real browsers inside OCI/LXD
+    images, and cause tier-3 to be falsely reported as available.
+    """
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(4096)
+    except Exception:
+        return False
+
+    return b"requires the chromium snap to be installed" in head
+
+
 def _detect_browser_executable():
     """Detect a full JS-capable browser (Tier 3)."""
     candidates = []
+    saw_snap_wrapper = False
     if _BROWSER_EXECUTABLE_OVERRIDE:
         candidates.append(_BROWSER_EXECUTABLE_OVERRIDE)
 
@@ -132,6 +148,7 @@ def _detect_browser_executable():
         "/snap/bin/chromium",
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
+        "/opt/google/chrome/google-chrome",
         "/usr/bin/google-chrome",
         "/usr/bin/google-chrome-stable",
     ])
@@ -147,10 +164,19 @@ def _detect_browser_executable():
 
     for candidate in candidates:
         if os.path.isabs(candidate) and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            if _is_chromium_snap_wrapper(candidate):
+                saw_snap_wrapper = True
+                continue
             return True, candidate, "ok"
         resolved = shutil.which(candidate)
         if resolved:
+            if _is_chromium_snap_wrapper(resolved):
+                saw_snap_wrapper = True
+                continue
             return True, resolved, "ok"
+
+    if saw_snap_wrapper:
+        return False, "", "chromium-wrapper-requires-snap"
 
     return False, "", "no-browser-executable-found"
 
@@ -161,22 +187,33 @@ def _detect_text_browser():
     always available in packaged deployments; also probe host PATH for
     snap-classic and bare-host scenarios.
     """
-    # Check $SNAP/usr/bin first (stage-packages land there in snap)
+    # Prefer runtime PATH candidates first (for OCI/LXD/Podman containers),
+    # then consider $SNAP/usr/bin fallback (snap-classic layout).
     snap_root = os.environ.get("SNAP", "")
     candidates = []
     for name in ("lynx", "w3m"):
-        if snap_root:
-            snap_path = os.path.join(snap_root, "usr", "bin", name)
-            if os.path.isfile(snap_path) and os.access(snap_path, os.X_OK):
-                candidates.append((name, snap_path))
-                continue
+        # Explicit system paths first, as some launcher environments provide a
+        # reduced PATH that omits /usr/bin during app bootstrap.
+        for explicit in (f"/usr/bin/{name}", f"/bin/{name}"):
+            if os.path.isfile(explicit) and os.access(explicit, os.X_OK):
+                candidates.append((name, explicit))
+
         resolved = shutil.which(name)
         if resolved:
             candidates.append((name, resolved))
 
-    if candidates:
-        name, path = candidates[0]
+        if snap_root:
+            snap_path = os.path.join(snap_root, "usr", "bin", name)
+            if os.path.isfile(snap_path) and os.access(snap_path, os.X_OK):
+                # Avoid duplicate probe if PATH already resolves to same location.
+                if resolved != snap_path:
+                    candidates.append((name, snap_path))
+
+    for name, path in candidates:
+        # Startup detection is path-based; runtime execution errors are handled
+        # by _fetch_via_text_browser() which auto-disables tier-2.5 if needed.
         return True, name, path, "ok"
+
     return False, "", "", "no-text-browser-found"
 
 
@@ -185,6 +222,8 @@ _TEXT_BROWSER_AVAILABLE, _TEXT_BROWSER_NAME, _TEXT_BROWSER_PATH, _TEXT_BROWSER_R
 
 
 def _domain_requires_browser(domain):
+    if _is_loopback_domain(domain):
+        return False
     if not domain or not _BROWSER_REQUIRED_DOMAINS:
         return False
     return any(domain == required or domain.endswith(f".{required}") for required in _BROWSER_REQUIRED_DOMAINS)
@@ -229,6 +268,8 @@ def _fetch_via_text_browser(url):
     too small to be useful (JS-only shell) and tier-3 escalation is warranted.
     Returns (None, False) if text-browser is unavailable or subprocess fails.
     """
+    global _TEXT_BROWSER_AVAILABLE, _TEXT_BROWSER_REASON
+
     if not _ENABLE_TEXT_BROWSER or not _TEXT_BROWSER_AVAILABLE:
         return None, False
 
@@ -279,6 +320,15 @@ def _fetch_via_text_browser(url):
     except subprocess.TimeoutExpired:
         _log(f"tier-2.5 timeout domain={_domain_from_url(url)} browser={_TEXT_BROWSER_NAME}")
         _record_timeout(_domain_from_url(url))
+        return None, False
+    except (FileNotFoundError, OSError) as exc:
+        # Disable tier-2.5 after runtime exec failures to avoid noisy repeats.
+        _TEXT_BROWSER_AVAILABLE = False
+        _TEXT_BROWSER_REASON = f"runtime-unusable ({exc.__class__.__name__})"
+        _log(
+            f"tier-2.5 disabled domain={_domain_from_url(url)} "
+            f"browser={_TEXT_BROWSER_NAME} reason={_TEXT_BROWSER_REASON}"
+        )
         return None, False
     except Exception as exc:
         _log(f"tier-2.5 error domain={_domain_from_url(url)} err={exc}")
@@ -429,6 +479,11 @@ def _domain_from_url(url):
         return ""
 
 
+def _is_loopback_domain(domain):
+    """True for local loopback hosts where browser fallback is never appropriate."""
+    return domain in ("localhost", "127.0.0.1", "::1")
+
+
 def _is_cooling_down(domain):
     if not domain:
         return False
@@ -572,6 +627,9 @@ def _try_tier25_then_tier3(url, domain, reason):
     Returns plain text string if tier-2.5 succeeds, None otherwise.
     Called only for GET-like requests where text content is expected.
     """
+    if _is_loopback_domain(domain):
+        return None
+
     text, empty_signal = _fetch_via_text_browser(url)
 
     if text and not empty_signal:
