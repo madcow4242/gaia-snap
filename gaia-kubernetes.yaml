@@ -1,0 +1,331 @@
+---
+# GAIA Desktop - Kubernetes Deployment Manifest
+# 
+# Features:
+#   - Multi-replica GAIA backend service with StatefulSet
+#   - Network reliability tier-2.5 (lynx) and tier-3 (chromium) fallback
+#   - Resource limits and requests for ML workloads
+#   - Persistent volume for workspace/cache storage
+#   - Health checks and graceful termination
+#
+# Prerequisites:
+#   - kubectl configured and connected to cluster
+#   - Container image pushed to registry: your-registry/gaia-desktop:0.21.2
+#   - Persistent volume storage class available (e.g., 'standard')
+#
+# Deploy:
+#   kubectl apply -f gaia-kubernetes.yaml
+#
+# Verify:
+#   kubectl get statefulset,pods,svc -n gaia
+#   kubectl logs -f deployment/gaia-desktop-0 -n gaia
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gaia
+  labels:
+    name: gaia
+
+---
+# ConfigMap: GAIA environment configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gaia-config
+  namespace: gaia
+data:
+  # Backend service configuration
+  GAIA_BACKEND_URL: "http://127.0.0.1:13305"
+  GAIA_AGENT_STEPS: "20"
+  GAIA_NETWORK_RELIABILITY_LOGGING: "true"
+  
+  # Python environment
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+---
+# PersistentVolumeClaim: Workspace and cache storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gaia-workspace
+  namespace: gaia
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# PersistentVolumeClaim: ML model cache
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gaia-cache
+  namespace: gaia
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+# Service: Internal ClusterIP for pod-to-pod communication
+apiVersion: v1
+kind: Service
+metadata:
+  name: gaia-backend
+  namespace: gaia
+  labels:
+    app: gaia-desktop
+spec:
+  type: ClusterIP
+  selector:
+    app: gaia-desktop
+  ports:
+    - name: backend
+      port: 13305
+      targetPort: 13305
+      protocol: TCP
+
+---
+# Service: LoadBalancer for external access (optional)
+# Uncomment to expose GAIA backend outside cluster
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: gaia-external
+#   namespace: gaia
+# spec:
+#   type: LoadBalancer
+#   selector:
+#     app: gaia-desktop
+#   ports:
+#     - name: backend
+#       port: 13305
+#       targetPort: 13305
+
+---
+# Deployment: GAIA Desktop with multi-replica horizontal scaling
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gaia-desktop
+  namespace: gaia
+  labels:
+    app: gaia-desktop
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: gaia-desktop
+  template:
+    metadata:
+      name: gaia-desktop
+      labels:
+        app: gaia-desktop
+    spec:
+      # =====================================================================
+      # Pod Scheduling and Resource Management
+      # =====================================================================
+      
+      # Request minimum resources for each pod
+      containers:
+        - name: gaia-backend
+          image: "your-registry/gaia-desktop:0.21.2"  # Replace with your registry
+          imagePullPolicy: IfNotPresent
+          
+          # ===================================================================
+          # Ports and Network
+          # ===================================================================
+          ports:
+            - name: backend
+              containerPort: 13305
+              protocol: TCP
+          
+          # ===================================================================
+          # Environment Variables (from ConfigMap)
+          # ===================================================================
+          envFrom:
+            - configMapRef:
+                name: gaia-config
+          
+          env:
+            - name: HOME
+              value: /root
+            - name: SNAP
+              value: /opt/gaia_runtime
+            - name: PYTHONPATH
+              value: /opt/gaia_runtime/lib/python_patches
+          
+          # ===================================================================
+          # Resource Limits (adjusted for ML workload)
+          # ===================================================================
+          resources:
+            requests:
+              cpu: "2"                    # 2 CPU cores minimum
+              memory: "8Gi"               # 8GB RAM minimum
+              ephemeral-storage: "10Gi"   # 10GB temp storage
+            limits:
+              cpu: "4"                    # Max 4 CPU cores
+              memory: "16Gi"              # Max 16GB RAM
+              ephemeral-storage: "20Gi"
+          
+          # ===================================================================
+          # Volume Mounts
+          # ===================================================================
+          volumeMounts:
+            - name: workspace
+              mountPath: /opt/gaia_runtime/workspace
+            - name: cache
+              mountPath: /root/.cache
+            - name: gaia-home
+              mountPath: /root/.gaia
+          
+          # ===================================================================
+          # Health Checks
+          # ===================================================================
+          
+          # Liveness probe: restart pod if backend becomes unresponsive
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 13305
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe: mark pod ready when backend is accepting requests
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 13305
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          
+          # ===================================================================
+          # Security Context
+          # ===================================================================
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false  # GAIA needs to write to /root
+            runAsNonRoot: false             # Needs root for Chromium sandbox
+          
+          # ===================================================================
+          # Lifecycle Hooks
+          # ===================================================================
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - sleep 10 && pkill -f gaia-launcher
+      
+      # =====================================================================
+      # Pod-level Configuration
+      # =====================================================================
+      
+      # DNS policy: use cluster DNS for service discovery
+      dnsPolicy: ClusterFirst
+      
+      # Restart policy: restart failed containers
+      restartPolicy: Always
+      
+      # Termination grace period: allow graceful shutdown
+      terminationGracePeriodSeconds: 30
+      
+      # Service account
+      serviceAccountName: default
+      
+      # =====================================================================
+      # Volumes
+      # =====================================================================
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: gaia-workspace
+        - name: cache
+          persistentVolumeClaim:
+            claimName: gaia-cache
+        - name: gaia-home
+          emptyDir: {}  # Ephemeral for pod lifetime
+      
+      # =====================================================================
+      # Node Selection and Affinity
+      # =====================================================================
+      
+      # Optional: require nodes with specific labels
+      # Example: nodeSelector:
+      #   node-role: gpu
+      
+      # Optional: pod affinity for spreading replicas across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - gaia-desktop
+                topologyKey: kubernetes.io/hostname
+
+---
+# HorizontalPodAutoscaler: Scale replicas based on resource usage
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gaia-desktop-hpa
+  namespace: gaia
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gaia-desktop
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# PodDisruptionBudget: Ensure minimum availability during cluster upgrades
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gaia-pdb
+  namespace: gaia
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: gaia-desktop
