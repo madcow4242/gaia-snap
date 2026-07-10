@@ -47,6 +47,18 @@ snap install chromium
 # run the installer and choose your preferred package type
 sudo chmod +x install_gaia.sh
 ./install_gaia.sh   # this is interactive - requires user input
+
+# ensure you have a local back-end running and configured for gaia, like lemonade-server
+snap install lemonade-server
+#sudo apt install lemonade-server  # if you want it on the host system directly instead of in a snap
+
+# launch Gaia using the icon created in the App Menu (one is installed per container type that you install)
+# gaia-dektop = snap
+# gaia-lxd    = LXD container
+# gaia-docker = Docker container
+# gaia-podman = Podman container
+#
+# the installer may auto-launch the container after installation, depending on the installation option chosen.
 ```
 
 ---
