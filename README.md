@@ -39,6 +39,8 @@ sudo chmod +x rebuild.sh
 #./rebuild.sh --podman  # interactive, but only builds Podman package
 
 # install OPTIONAL packages that help with successful web retrieval
+# NOTE: these only need to be separately installed for the snap package,
+#        while the other package types have them automatically baked in.
 sudo apt install lynx
 snap install chromium
 
