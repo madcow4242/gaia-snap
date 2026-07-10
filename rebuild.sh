@@ -45,7 +45,7 @@ validate_required_tools() {
         echo "ERROR: Required tools not found: ${missing_tools[*]}"
         echo ""
         echo "Install required tools with:"
-        echo "  sudo apt install snapcraft rockcraft"
+        echo "  snap install snapcraft rockcraft"
         exit 1
     fi
 }
