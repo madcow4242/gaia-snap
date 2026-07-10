@@ -12,6 +12,36 @@ The classic confinement Snap package ensures `gaia-desktop` can natively interac
 > **NOTE:** to use the software in this archive, you must first clone the project to your local system and build the desired packages using the rebuild.sh script, as detailed below in the "Developer Workspace & Local Compilation Guide" section.  The snap package is intended to be distributed via the snap store, and will eventually be available pre-built by simply typing "snap install gaia-desktop" at the command line.  The other packages may or may not be distributed as pre-built artifacts as well, but are not yet today.
 
 ---
+## Quick Start Guide
+To install GAIA via one of the installation packaging options as quickly as possible, here are the basic steps.  See below for details on configuration options and operation.
+
+```bash
+# create a directory for the project
+mkdir MyGaiaProject
+cd MyGaiaProject
+
+# clone the repo
+gh repo clone madcow4242/gaia-snap
+cd gaia-snap
+
+# make the rebuild script executable and start it
+sudo chmod +x rebuild.sh
+#./rebuild.sh           # interactive - this builds ALL package types
+./rebuild.sh --snap     # interatcive, but only builds snap package
+#./rebuild.sh --lxd     # interactive, but only builds LXD package
+#./rebuild.sh --docker  # interactive, but only builds Docker package
+#./rebuild.sh --podman  # interactive, but only builds Podman package
+
+# install OPTIONAL packages that help with successful web retrieval
+sudo apt install lynx
+snap install chromium
+
+# run the installer and choose your preferred package type
+sudo chmod +x install_gaia.sh
+./install_gaia.sh   # this is interactive - requires user input
+```
+
+---
 
 ## 📋 Prerequisites & System Requirements
 
