@@ -24,6 +24,12 @@ cd MyGaiaProject
 gh repo clone madcow4242/gaia-snap
 cd gaia-snap
 
+# install required build tools
+snap install snapcraft
+snap install rockcraft
+sudo apt update
+sudo apt install skopeo
+
 # make the rebuild script executable and start it
 sudo chmod +x rebuild.sh
 #./rebuild.sh           # interactive - this builds ALL package types
