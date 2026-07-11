@@ -194,7 +194,7 @@ To deliver a portable deployment package that skips initial asset download phase
 2. **Upstream Asset Rewrite Defenses:** If the Electron UI spots an uninitialized home state or version drift, it automatically downloads a stock, unpatched copy of GAIA from PyPI into `~/.gaia/venv`. We mitigate this by declaring `GAIA_DISABLE_UPDATE=1` to kill network updaters, and using a native snap hook to drop complete state mock files into place, forcing the app to evaluate the environment as complete.
 3. **Dynamic Environment Patching (PYTHONPATH):** Electron calls direct kernel functions to map its virtual environments, ignoring standard shell folder definitions. The launcher script explicitly appends our read-only snap patch folder to the shell `PYTHONPATH`. Whichever Python environment the framework runs, the runtime processes our custom memory hooks first.
 4. **Automated Security Cache Seeding:** The Python core features a rigorous custom `PathValidator` class that blocks any file execution outside explicit safe paths by reading a dedicated local JSON file (`~/.gaia/cache/allowed_paths.json`). Because this file overrides snap database structures, `install_gaia.sh` dynamically builds and mounts this JSON data layout at runtime inside the container to safely clear host path permissions.
-5. **Network Reliability Patch:** To improve the reliability of web document retrieval and avoid common issues that prevent automatic web scraping, a custom monkeypatch is included in THIS distribution of GAIA (which is not a standard feature of GAIA itself).  See the "Network Reliability Patch" section at the bottom of this document for full details of the implementation.
+5. **Network Reliability Patch:** To improve the reliability of web document retrieval and avoid common issues that prevent automatic web scraping, a custom monkeypatch is included in THIS distribution of GAIA (which is not a standard feature of GAIA itself). See the "🌐 Network Reliability Patch" section at the bottom of this document for full implementation details.
 
 ---
 
@@ -243,7 +243,7 @@ Simply close the GAIA desktop application and relaunch it from your application 
 
 ## 🌐 Network Reliability Patch (v0.21.2+)
 
-This implementation of GAIA implements a **four-tier network reliability fallback strategy** to handle challenging web environments where direct HTTP requests fail due to JavaScript rendering requirements, anti-bot measures, or server-side protections.  **This is not a standard feature of GAIA today, but is applied as a monkeypatch in the containers themselves.**
+This implementation of GAIA implements a **four-tier network reliability fallback strategy** to handle challenging web environments where direct HTTP requests fail due to JavaScript rendering requirements, anti-bot measures, or server-side protections.
 
 ### The Four-Tier Strategy
 
@@ -295,7 +295,7 @@ All deployment topologies now achieve **full network reliability capability pari
 The snap installation of GAIA will use the Lynx, chromium, or w3m packages from the host system, _if installed_ - it is highly recommended that you also install these packages to improve the success rate of web retrievals.  
 
   ```bash
-  sudo apt update & sudo apt install lynx
+  sudo apt update && sudo apt install lynx w3m
   snap install chromium
   ```
 
