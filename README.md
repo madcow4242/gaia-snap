@@ -33,7 +33,7 @@ sudo apt install skopeo
 # make the rebuild script executable and start it
 sudo chmod +x rebuild.sh
 #./rebuild.sh           # interactive - this builds ALL package types
-./rebuild.sh --snap     # interatcive, but only builds snap package
+./rebuild.sh --snap     # interactive, but only builds snap package
 #./rebuild.sh --lxd     # interactive, but only builds LXD package
 #./rebuild.sh --docker  # interactive, but only builds Docker package
 #./rebuild.sh --podman  # interactive, but only builds Podman package
@@ -238,7 +238,6 @@ Simply close the GAIA desktop application and relaunch it from your application 
   ```
 
 *(Note: Closing the main UI window with the standard **X** window button merely hides the interface layer while the core processes continue executing in the background. You must restart the container or use the tray icon to exit completely so the backend engine re-scans your custom agent script configurations on startup!)*
-4. **Automated Security Cache Seeding:** The Python core features a rigorous custom `PathValidator` class that blocks any file execution outside explicit safe paths by reading a dedicated local JSON file (`~/.gaia/cache/allowed_paths.json`). Because this file overrides snap database structures, `install_gaia.sh` dynamically builds and mounts this JSON data layout at runtime inside the container to safely clear host path permissions.
 
 ---
 
