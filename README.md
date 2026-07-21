@@ -1,7 +1,7 @@
 # 🚀 GAIA Desktop Framework Engine 
 ### (Classic Snap Build Environment)
 
-**GAIA Version:** Current version: 0.21.2
+**GAIA Version:** Current version: 0.22.0
 
 This repository contains the production deployment blueprints for packaging [AMD's GAIA framework](https://github.com/amd/gaia) as a portable Linux Snap configured under Classic Confinement as `gaia-desktop`.  It also builds an OCI-compliant container image (Rock) and LXD-, Docker-, and Podman-compatible container images.  There is an installer script to help automate installing via your preferred route.
 
@@ -93,7 +93,7 @@ Select **Option 1** from the interactive setup menu. This deploys the pre-compil
 ### Option 2: Secure Isolated System Container Sandbox (LXD Engine) [Recommended]
 Select **Option 2** from the interactive setup menu. This architecture deploys and boots GAIA portably inside an unprivileged system container while granting optional directory access to a host system folder you specify on installation. 
 
-* **Autonomous Standalone Importing:** The installer automatically scans the workspace directory for the pre-baked container distribution package (`gaia-desktop_0.21.2_LXD-sandbox.tar.gz`). If it is not registered on your machine yet, or if a fresh compilation update is detected via filesystem timestamp analysis, the installer automatically purges old instances and restores the environment using `lxc import`.
+* **Autonomous Standalone Importing:** The installer automatically scans the workspace directory for the pre-baked container distribution package (`gaia-desktop_0.22.0_LXD-sandbox.tar.gz`). If it is not registered on your machine yet, or if a fresh compilation update is detected via filesystem timestamp analysis, the installer automatically purges old instances and restores the environment using `lxc import`.
 * **GPU Passthrough:** Natively passes physical graphics device endpoints (`/dev/dri`) directly across the unprivileged sandbox partition boundary so the Electron window manager handles UI rendering via local hardware acceleration instead of draining host CPU cycles.
 * **Direct Host Path Mirroring:** If you choose to expose a host folder workspace (e.g., `/home/my_user/Documents`), the engine maps an identical absolute file path layout inside the container using real-time kernel namespace shifts (`raw.idmap`).
 * **Zero Translation Queries:** Your AI agents can read, process, and write files naturally using your actual host paths. Instructing an agent to write a document to `/home/my_user/Documents/report.txt` updates the true file on your host machine with no path mapping conversion delay.
@@ -241,7 +241,7 @@ Simply close the GAIA desktop application and relaunch it from your application 
 
 ---
 
-## 🌐 Network Reliability Patch (v0.21.2+)
+## 🌐 Network Reliability Patch (v0.22.0+)
 
 This implementation of GAIA implements a **four-tier network reliability fallback strategy** to handle challenging web environments where direct HTTP requests fail due to JavaScript rendering requirements, anti-bot measures, or server-side protections.
 
@@ -351,9 +351,9 @@ which lynx chromium
 
 **Docker/LXD/Podman**:
 ```bash
-docker run gaia-desktop:0.21.2 which lynx chromium-browser
+docker run gaia-desktop:0.22.0 which lynx chromium-browser
 lxc exec gaia-runtime -- which lynx chromium-browser
-podman run gaia-desktop:0.21.2 which lynx chromium-browser
+podman run gaia-desktop:0.22.0 which lynx chromium-browser
 ```
 
 **Kubernetes**:

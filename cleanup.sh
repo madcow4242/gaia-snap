@@ -9,7 +9,7 @@ set -euo pipefail
 
 WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAST_VERSION_FILE="${WORKSPACE_DIR}/.last_version"
-DEFAULT_VERSION="0.21.2"
+DEFAULT_VERSION="0.22.0"
 TARGET_VERSION=""
 TOTAL_PURGE=false
 
@@ -29,9 +29,9 @@ Modes:
 
 Examples:
   ./cleanup.sh
-    ./cleanup.sh 0.21.2
-    ./cleanup.sh --version=0.21.2
-    sudo ./cleanup.sh --total-purge --version=0.21.2
+    ./cleanup.sh 0.22.0
+    ./cleanup.sh --version=0.22.0
+    sudo ./cleanup.sh --total-purge --version=0.22.0
 EOF
 }
 
@@ -58,7 +58,7 @@ require_root() {
 validate_version() {
     if ! [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         error "Invalid version format: $1"
-        error "Expected semantic version format X.Y.Z (example: 0.21.2)."
+        error "Expected semantic version format X.Y.Z (example: 0.22.0)."
         exit 1
     fi
 }

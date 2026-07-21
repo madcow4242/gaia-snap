@@ -35,7 +35,7 @@ Request URL
 
 ## Topology Parity Matrix
 
-### Before (v0.21.2 without bundled browsers):
+### Before (v0.22.0 without bundled browsers):
 
 | Topology | Tier-1 | Tier-2.5 | Tier-3 | Status |
 |----------|--------|----------|--------|--------|
@@ -47,7 +47,7 @@ Request URL
 
 **Issue**: Without tier-2.5/3, many sites fail or return useless content (JS-required pages, bot detection).
 
-### After (v0.21.2 with bundled browsers):
+### After (v0.22.0 with bundled browsers):
 
 | Topology | Tier-1 | Tier-2.5 | Tier-3 | Status | Storage Cost |
 |----------|--------|----------|--------|--------|--------------|
@@ -81,8 +81,8 @@ Reference implementation for teams building Docker directly (not via rockcraft):
 
 **Usage**:
 ```bash
-docker build -t gaia-desktop:0.21.2 -f Dockerfile .
-docker run -it gaia-desktop:0.21.2
+docker build -t gaia-desktop:0.22.0 -f Dockerfile .
+docker run -it gaia-desktop:0.22.0
 ```
 
 ### 3. gaia-kubernetes.yaml (K8s Production)
@@ -101,15 +101,15 @@ kubectl apply -f gaia-kubernetes.yaml
 kubectl get pods -n gaia
 ```
 
-## Build Artifacts (v0.21.2 with Browsers)
+## Build Artifacts (v0.22.0 with Browsers)
 
 After running `./rebuild.sh`:
 
 ```
-gaia-desktop_0.21.2_amd64.snap                    # Snap package (~650MB)
-gaia-desktop_0.21.2_amd64.rock                    # OCI base image
-gaia-desktop_0.21.2_docker-image.tar              # Docker archive (~600MB)
-gaia-desktop_0.21.2_LXD-sandbox.tar.gz            # LXD container image (~600MB)
+gaia-desktop_0.22.0_amd64.snap                    # Snap package (~650MB)
+gaia-desktop_0.22.0_amd64.rock                    # OCI base image
+gaia-desktop_0.22.0_docker-image.tar              # Docker archive (~600MB)
+gaia-desktop_0.22.0_LXD-sandbox.tar.gz            # LXD container image (~600MB)
 ```
 
 **New size impact**: 
@@ -120,7 +120,7 @@ gaia-desktop_0.21.2_LXD-sandbox.tar.gz            # LXD container image (~600MB)
 
 ### Option A: Snap (Recommended for Desktop)
 ```bash
-snap install ./gaia-desktop_0.21.2_amd64.snap --classic
+snap install ./gaia-desktop_0.22.0_amd64.snap --classic
 gaia-desktop
 ```
 **Pros**: Smallest footprint, sandbox security, auto-updates
@@ -128,15 +128,15 @@ gaia-desktop
 
 ### Option B: Docker (Recommended for Container/CI-CD)
 ```bash
-docker load < gaia-desktop_0.21.2_docker-image.tar
-docker run -it gaia-desktop:0.21.2
+docker load < gaia-desktop_0.22.0_docker-image.tar
+docker run -it gaia-desktop:0.22.0
 ```
 **Pros**: Cross-platform, portable, easy CI/CD integration
 **Cons**: Larger image due to bundled chromium
 
 ### Option C: LXD (Recommended for System Containers)
 ```bash
-lxc import gaia-desktop_0.21.2_LXD-sandbox.tar.gz gaia-runtime
+lxc import gaia-desktop_0.22.0_LXD-sandbox.tar.gz gaia-runtime
 lxc launch gaia-runtime gaia-1
 ```
 **Pros**: Lightweight, full Linux environment, performant
@@ -152,8 +152,8 @@ kubectl logs -f deployment/gaia-desktop-0 -n gaia
 
 ### Option E: Podman (Drop-in Docker Replacement)
 ```bash
-podman load < gaia-desktop_0.21.2_docker-image.tar
-podman run -it gaia-desktop:0.21.2
+podman load < gaia-desktop_0.22.0_docker-image.tar
+podman run -it gaia-desktop:0.22.0
 ```
 **Pros**: Rootless mode, no daemon requirement, OCI-compliant
 **Cons**: Newer tooling, less ecosystem support than Docker
@@ -164,15 +164,15 @@ podman run -it gaia-desktop:0.21.2
 
 **Snap**:
 ```bash
-snap list gaia-desktop                    # Confirm v0.21.2 x1
+snap list gaia-desktop                    # Confirm v0.22.0 x1
 which lynx chromium                       # Both available
 gaia-desktop --check-network-tiers        # (if implemented)
 ```
 
 **Docker**:
 ```bash
-docker run gaia-desktop:0.21.2 which lynx chromium-browser
-docker run gaia-desktop:0.21.2 grep -i "network.reliability" /var/log/gaia/*.log | head -20
+docker run gaia-desktop:0.22.0 which lynx chromium-browser
+docker run gaia-desktop:0.22.0 grep -i "network.reliability" /var/log/gaia/*.log | head -20
 ```
 
 **LXD**:
@@ -248,7 +248,7 @@ The `_gaia_network_reliability.py` refactoring achieved:
 **Cause**: Each request spawns fresh chromium process; multiple concurrent requests = multiple processes
 
 **Fix**:
-- **Docker**: Increase container memory limit: `docker run -m 8g gaia-desktop:0.21.2`
+- **Docker**: Increase container memory limit: `docker run -m 8g gaia-desktop:0.22.0`
 - **LXD**: Increase container limit: `lxc config set gaia-runtime limits.memory 8GB`
 - **K8s**: Already configured in gaia-kubernetes.yaml (requests: 8GB, limits: 16GB)
 
@@ -258,7 +258,7 @@ The `_gaia_network_reliability.py` refactoring achieved:
 
 **Fix**:
 ```bash
-docker run -v /etc/ssl/certs:/etc/ssl/certs:ro gaia-desktop:0.21.2
+docker run -v /etc/ssl/certs:/etc/ssl/certs:ro gaia-desktop:0.22.0
 # or in Dockerfile: RUN update-ca-certificates
 ```
 

@@ -120,7 +120,7 @@ fi
 
 echo "LOG: Synchronizing local workspace sentinel states..."
 if [ -z "$SNAP_VERSION" ]; then
-    SNAP_VERSION="0.21.2"
+    SNAP_VERSION="0.22.0"
 fi
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -139,7 +139,7 @@ mkdir -p "${GAIA_HOME}/venv/bin"
 cat << EOF > "${GAIA_HOME}/electron-install-state.json"
 {
   "status": "ready",
-  "version": "0.21.2"
+  "version": "0.22.0"
 }
 EOF
 

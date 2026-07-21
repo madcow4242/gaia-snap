@@ -56,7 +56,7 @@ validate_required_tools() {
 validate_version_format() {
     if ! [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "ERROR: Invalid version format: $1"
-        echo "   Version must be in semantic versioning format (e.g., 0.21.2)"
+        echo "   Version must be in semantic versioning format (e.g., 0.22.0)"
         exit 1
     fi
 }
@@ -76,15 +76,15 @@ export CRAFT_PARALLEL_BUILD_COUNT=8
 # =====================================================================
 # GLOBAL WORKSPACE VARIABLE DEFINITIONS
 # =====================================================================
-GLOBAL_DEFAULT_VERSION="0.21.2"
+GLOBAL_DEFAULT_VERSION="0.22.0"
 
 VERSION_CACHE_FILE=".last_version"
 GAIA_VERSION=""
 
 # 1. Parse incoming command-line arguments
 # Supports both forms:
-#   --gaia-version=0.21.2
-#   --gaia-version 0.21.2
+#   --gaia-version=0.22.0
+#   --gaia-version 0.22.0
 TEMP_ARGS=()
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -94,7 +94,7 @@ while [ $# -gt 0 ]; do
             ;;
         --gaia-version)
             if [ $# -lt 2 ]; then
-                echo "ERROR: --gaia-version requires a value (example: --gaia-version 0.21.2)." >&2
+                echo "ERROR: --gaia-version requires a value (example: --gaia-version 0.22.0)." >&2
                 exit 1
             fi
             GAIA_VERSION="$2"

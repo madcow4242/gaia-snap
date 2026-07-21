@@ -4,7 +4,7 @@ set -e
 # =====================================================================
 # GLOBAL CONFIGURATION CONFIG/VERSION VARIABLES
 # =====================================================================
-GAIA_VERSION="0.21.2"  # Centralized single source of truth for installations
+GAIA_VERSION="0.22.0"  # Centralized single source of truth for installations
 
 # Capture the absolute path of the directory where the script is located
 WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
