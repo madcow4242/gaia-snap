@@ -309,6 +309,11 @@ if [ "$BUILD_DOCKER" = true ]; then
     skopeo copy "oci-archive:${ROCK_FILE}" "docker-archive:./${DOCKER_OUTPUT_NAME}:gaia-desktop:${GAIA_VERSION}"
 
     if [ -x "$(command -v docker)" ]; then
+        if [ -f "./gaia-desktop_${GAIA_VERSION}_docker-image.tar" ]; then
+            sudo chmod 644 "./gaia-desktop_${GAIA_VERSION}_docker-image.tar"
+            sudo chown $(id -u):$(id -g) "./gaia-desktop_${GAIA_VERSION}_docker-image.tar"
+        fi
+fi
         echo "INFO: Loading Docker archive into local Docker daemon."
         docker load -i "./${DOCKER_OUTPUT_NAME}"
     fi
