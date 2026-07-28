@@ -221,4 +221,6 @@ exec "$TARGET_EXEC" \
     --disable-software-rasterizer \
     --disable-dev-shm-usage \
     --disable-gpu-sandbox \
-    --color-profile=srgb
+    --color-profile=srgb \
+    --ui \
+    --ui-port 4200

@@ -43,9 +43,14 @@ apps:
   gaia-desktop:
     command: bin/gaia-launcher.sh
     desktop: usr/share/applications/gaia-desktop.desktop
+    plugs:
+      - network
+      - network-bind
+    slots:
+      - http
 
 parts:
-  # PART 1: Build Python backend runtime
+  # part 1: build python backend runtime
   gaia-backend:
     plugin: python
     after:
@@ -122,7 +127,7 @@ parts:
         echo "LOG: TEMP local-agent workaround disabled (GAIA_ENABLE_LOCAL_AGENT_WORKAROUND=0)."
       fi
 
-  # PART 2: Extract desktop UI artifact
+  # part 2: extract desktop UI artifact
   gaia-desktop:
     plugin: nil
     after:
@@ -148,7 +153,7 @@ parts:
       cp "${CRAFT_PRIME}/usr/share/icons/hicolor/512x512/apps/gaia-desktop.png" \
          "${CRAFT_PRIME}/opt/GAIA/resources/app.asar.unpacked/assets/icon.png"
 
-  # PART 3: Stage launcher and hook files
+  # part 3: stage launcher and hook files
   gaia-sideloads:
     plugin: dump
     source: .
