@@ -46,8 +46,6 @@ apps:
     plugs:
       - network
       - network-bind
-    slots:
-      - http
 
 parts:
   # part 1: build python backend runtime
