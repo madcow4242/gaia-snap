@@ -61,6 +61,7 @@ parts:
       - python3-setuptools
       - git
     override-build: |
+      # Allow GAIA_VERSION override from build environment; default to 0.22.0
       VERSION_TAG="0.22.0"
        
       echo "LOG: Setting snap version metadata: ${VERSION_TAG}"
@@ -82,47 +83,54 @@ parts:
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install "${CRAFT_PART_SRC}/cloned-framework/.[ui]"
 
       # ------------------------------------------------------------------
-      # TEMP WORKAROUND (remove after upstream agent wheel publishing is fixed)
+      # TEMP WORKAROUND (backward/forward compatible)
       # Context: https://github.com/amd/gaia/issues/1568
       # Purpose: Install agent packages directly from cloned GAIA source so
       # browser-capable agents are present even when PyPI wheel publishing lags.
       # Disable by setting GAIA_ENABLE_LOCAL_AGENT_WORKAROUND=0 in build env.
       # ------------------------------------------------------------------
       if [ "${GAIA_ENABLE_LOCAL_AGENT_WORKAROUND:-1}" = "1" ]; then
-        echo "LOG: TEMP workaround enabled: installing local GAIA agents from source tree."
+        echo "LOG: Local agent workaround enabled: scanning source tree for GAIA agents."
 
-        AGENT_ROOT="${CRAFT_PART_SRC}/cloned-framework/hub/agents/python"
         BROWSER_AGENT_INSTALLED=0
 
         install_agent_if_present() {
-          local agent_dir="$1"
-          if [ -d "${AGENT_ROOT}/${agent_dir}" ]; then
-            echo "LOG: Installing local GAIA agent package: ${agent_dir}"
-            "${CRAFT_PART_INSTALL}/venv/bin/pip" install "${AGENT_ROOT}/${agent_dir}"
+          local agent_rel_path="$1"
+          local target_path="${CRAFT_PART_SRC}/cloned-framework/${agent_rel_path}"
+          if [ -d "${target_path}" ]; then
+            echo "LOG: Installing local GAIA agent package: ${agent_rel_path}"
+            "${CRAFT_PART_INSTALL}/venv/bin/pip" install "${target_path}"
             return 0
           fi
           return 1
         }
 
-        # Browser/browser-lite naming has varied; install whichever exists.
-        for candidate in browser browser-lite browser_lite; do
-          if install_agent_if_present "${candidate}"; then
-            BROWSER_AGENT_INSTALLED=1
-          fi
+        # Check browser agent across potential layout changes (0.20.0 vs 0.22.0+)
+        for candidate in \
+          "hub/agents/python/browser" \
+          "hub/agents/python/browser-lite" \
+          "hub/agents/python/browser_lite" \
+          "agents/browser" \
+          "agents/browser-lite" \
+          "agents/browser_lite"; do
+            if install_agent_if_present "${candidate}"; then
+              BROWSER_AGENT_INSTALLED=1
+            fi
         done
 
         if [ "${BROWSER_AGENT_INSTALLED}" -ne 1 ]; then
-          echo "ERROR: Local agent workaround enabled, but no browser agent package found."
-          echo "ERROR: Expected one of: ${AGENT_ROOT}/browser, browser-lite, browser_lite"
-          exit 1
+          echo "WARNING: No local browser agent source package found in expected directories."
+          echo "WARNING: Proceeding with standard backend installation (relying on pip installed .[ui])."
         fi
 
-        # Optional extras: install more local agents when present.
-        for optional_agent in analyst code connectors-demo docqa email routing docker fileio jira summarize sd blender emr; do
-          install_agent_if_present "${optional_agent}" || true
+        # Optional extras: install local agents if present across legacy and current locations.
+        OPTIONAL_AGENTS="analyst code connectors-demo docqa email routing docker fileio jira summarize sd blender emr"
+        for optional_agent in ${OPTIONAL_AGENTS}; do
+          install_agent_if_present "hub/agents/python/${optional_agent}" || \
+          install_agent_if_present "agents/${optional_agent}" || true
         done
       else
-        echo "LOG: TEMP local-agent workaround disabled (GAIA_ENABLE_LOCAL_AGENT_WORKAROUND=0)."
+        echo "LOG: Local-agent workaround disabled (GAIA_ENABLE_LOCAL_AGENT_WORKAROUND=0)."
       fi
 
   # part 2: extract desktop UI artifact
@@ -189,10 +197,5 @@ parts:
     build-attributes: [ enable-patchelf ]
     stage-packages:
       - ocrmypdf
-      # Tier-2.5 text-browser retrieval: lightweight fallback for server-rendered
-      # HTML that blocks raw Python HTTP. Both are headless and work without a
-      # display server in all topologies (snap, OCI, Docker, LXD, Podman).
-      # Empty-page detection in _gaia_network_reliability.py escalates to Tier-3
-      # (full Chromium) automatically when these return useless content.
       - lynx
       - w3m

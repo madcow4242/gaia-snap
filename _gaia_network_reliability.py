@@ -15,16 +15,22 @@ Blackhole detection:
   (or delivers it only after an extreme delay). Classic signs: Read timed out,
   empty bodies, or per-domain timeout counts above threshold.
 
+Local / Lemonade LLM Endpoints:
+  Local IP addresses, loopback endpoints, and Lemonade server routes are detected
+  automatically. They bypass domain cooldowns/circuit breakers and receive extended
+  timeout budgets to allow for local model swapping, offloading, and long inference runs.
+
 This module focuses on reliability, not stealth or bot-evasion.
 """
 
 import asyncio
+import ipaddress
+import os
 import random
+import shutil
 import subprocess
 import threading
 import time
-import os
-import shutil
 from urllib.parse import urlparse
 
 
@@ -48,9 +54,9 @@ BLOCKED_MARKERS = (
 # JavaScript shell/SPA indicators (used by Tier-2 empty-page detection to escalate to Tier 2.5/3)
 JS_SHELL_MARKERS = (
     "<noscript>",
-    "id=\"root\"",
+    'id="root"',
     "id='root'",
-    "id=\"app\"",
+    'id="app"',
     "id='app'",
     "__next_data__",
     "window.__data",
@@ -67,8 +73,11 @@ TEXT_CONTENT_MARKERS = (
 # have it capped at _MAX_CALLER_TIMEOUT_SECONDS to prevent long stalls.
 _DEFAULT_CONNECT_TIMEOUT = float(os.environ.get("GAIA_CONNECT_TIMEOUT", "5"))
 _DEFAULT_READ_TIMEOUT = float(os.environ.get("GAIA_READ_TIMEOUT", "8"))
-# Hard cap on any caller-supplied timeout (e.g. browser_tools passes 30s).
+# Hard cap on any caller-supplied timeout for public web traffic.
 _MAX_CALLER_TIMEOUT_SECONDS = float(os.environ.get("GAIA_MAX_CALLER_TIMEOUT", "8"))
+
+# Timeout budget specifically for local Lemonade / LLM endpoints (defaults to 300s / 5 mins)
+_LEMONADE_TIMEOUT = float(os.environ.get("GAIA_LEMONADE_TIMEOUT", "300.0"))
 
 _MAX_RETRIES = 0
 _BACKOFF_BASE_SECONDS = 0.6
@@ -121,12 +130,34 @@ def _safe_domain_str(domain):
     return domain or "-"
 
 
-def _is_chromium_snap_wrapper(path):
-    """Detect Ubuntu chromium-browser wrapper scripts that require snapd.
+def _is_lemonade_or_local_endpoint(domain_or_url: str) -> bool:
+    """Identify if target host/url is local LAN, loopback, or Lemonade server."""
+    if not domain_or_url:
+        return False
 
-    These wrappers are executable files but not real browsers inside OCI/LXD
-    images, and cause tier-3 to be falsely reported as available.
-    """
+    domain = _domain_from_url(domain_or_url) if "://" in domain_or_url else domain_or_url
+    domain_clean = domain.split(":")[0].strip().lower()
+
+    if domain_clean in ("localhost", "127.0.0.1", "::1", "lemonade", "lemonade-server"):
+        return True
+
+    # Check for private IP range
+    try:
+        ip = ipaddress.ip_address(domain_clean)
+        if ip.is_private or ip.is_loopback:
+            return True
+    except ValueError:
+        pass
+
+    # Check for Lemonade API path signature in URL
+    if "/api/v1/" in domain_or_url or "/v1/chat/completions" in domain_or_url:
+        return True
+
+    return False
+
+
+def _is_chromium_snap_wrapper(path):
+    """Detect Ubuntu chromium-browser wrapper scripts that require snapd."""
     try:
         with open(path, "rb") as handle:
             head = handle.read(4096)
@@ -143,7 +174,6 @@ def _detect_browser_executable():
     if _BROWSER_EXECUTABLE_OVERRIDE:
         candidates.append(_BROWSER_EXECUTABLE_OVERRIDE)
 
-    # Prefer explicit absolute paths first to avoid PATH ambiguity in snaps.
     candidates.extend([
         "/snap/bin/chromium",
         "/usr/bin/chromium",
@@ -182,18 +212,10 @@ def _detect_browser_executable():
 
 
 def _detect_text_browser():
-    """Detect a text-browser for Tier 2.5 (lynx, w3m).
-    Both are packaged in stage-packages for snap/containers so they are
-    always available in packaged deployments; also probe host PATH for
-    snap-classic and bare-host scenarios.
-    """
-    # Prefer runtime PATH candidates first (for OCI/LXD/Podman containers),
-    # then consider $SNAP/usr/bin fallback (snap-classic layout).
+    """Detect a text-browser for Tier 2.5 (lynx, w3m)."""
     snap_root = os.environ.get("SNAP", "")
     candidates = []
     for name in ("lynx", "w3m"):
-        # Explicit system paths first, as some launcher environments provide a
-        # reduced PATH that omits /usr/bin during app bootstrap.
         for explicit in (f"/usr/bin/{name}", f"/bin/{name}"):
             if os.path.isfile(explicit) and os.access(explicit, os.X_OK):
                 candidates.append((name, explicit))
@@ -205,13 +227,10 @@ def _detect_text_browser():
         if snap_root:
             snap_path = os.path.join(snap_root, "usr", "bin", name)
             if os.path.isfile(snap_path) and os.access(snap_path, os.X_OK):
-                # Avoid duplicate probe if PATH already resolves to same location.
                 if resolved != snap_path:
                     candidates.append((name, snap_path))
 
     for name, path in candidates:
-        # Startup detection is path-based; runtime execution errors are handled
-        # by _fetch_via_text_browser() which auto-disables tier-2.5 if needed.
         return True, name, path, "ok"
 
     return False, "", "", "no-text-browser-found"
@@ -222,7 +241,7 @@ _TEXT_BROWSER_AVAILABLE, _TEXT_BROWSER_NAME, _TEXT_BROWSER_PATH, _TEXT_BROWSER_R
 
 
 def _domain_requires_browser(domain):
-    if _is_loopback_domain(domain):
+    if _is_lemonade_or_local_endpoint(domain):
         return False
     if not domain or not _BROWSER_REQUIRED_DOMAINS:
         return False
@@ -230,7 +249,7 @@ def _domain_requires_browser(domain):
 
 
 def _promote_domain_to_browser(domain, reason):
-    if not domain:
+    if not domain or _is_lemonade_or_local_endpoint(domain):
         return
     if not (_ENABLE_BROWSER_RETRIEVER and _BROWSER_AVAILABLE):
         return
@@ -263,23 +282,19 @@ def _maybe_log_browser_state():
 
 
 def _fetch_via_text_browser(url):
-    """Tier-2.5: fetch URL via lynx or w3m subprocess and return plain text.
-    Returns (text, empty_signal) where empty_signal=True means the page was
-    too small to be useful (JS-only shell) and tier-3 escalation is warranted.
-    Returns (None, False) if text-browser is unavailable or subprocess fails.
-    """
+    """Tier-2.5: fetch URL via lynx or w3m subprocess."""
     global _TEXT_BROWSER_AVAILABLE, _TEXT_BROWSER_REASON
 
-    if not _ENABLE_TEXT_BROWSER or not _TEXT_BROWSER_AVAILABLE:
+    if not _ENABLE_TEXT_BROWSER or not _TEXT_BROWSER_AVAILABLE or _is_lemonade_or_local_endpoint(url):
         return None, False
 
     try:
         if _TEXT_BROWSER_NAME == "lynx":
             cmd = [
                 _TEXT_BROWSER_PATH,
-                "-dump",          # output rendered text to stdout
-                "-nolist",        # omit link-list footer
-                "-nomargins",     # no left margin padding
+                "-dump",
+                "-nolist",
+                "-nomargins",
                 "-width=120",
                 "-connect_timeout=8",
                 "-read_timeout=12",
@@ -309,7 +324,7 @@ def _fetch_via_text_browser(url):
                 f"browser={_TEXT_BROWSER_NAME} bytes={byte_len} "
                 f"(threshold={_TEXT_BROWSER_EMPTY_THRESHOLD}) → escalating to tier-3"
             )
-            return text, True  # empty_signal=True → escalate
+            return text, True
 
         _log(
             f"tier-2.5 ok domain={_domain_from_url(url)} "
@@ -322,7 +337,6 @@ def _fetch_via_text_browser(url):
         _record_timeout(_domain_from_url(url))
         return None, False
     except (FileNotFoundError, OSError) as exc:
-        # Disable tier-2.5 after runtime exec failures to avoid noisy repeats.
         _TEXT_BROWSER_AVAILABLE = False
         _TEXT_BROWSER_REASON = f"runtime-unusable ({exc.__class__.__name__})"
         _log(
@@ -336,13 +350,8 @@ def _fetch_via_text_browser(url):
 
 
 def _fetch_via_browser(url):
-    """Tier-3: fetch URL via full browser and return rendered DOM/text payload.
-
-    Uses improved Chromium flags with automation-detection bypass to retrieve
-    content from sites that serve interstitials/cookies to bot-like requests.
-    Returns payload string, or None on error.
-    """
-    if not _ENABLE_BROWSER_RETRIEVER or not _BROWSER_AVAILABLE:
+    """Tier-3: fetch URL via full browser."""
+    if not _ENABLE_BROWSER_RETRIEVER or not _BROWSER_AVAILABLE or _is_lemonade_or_local_endpoint(url):
         return None
 
     domain = _domain_from_url(url)
@@ -422,24 +431,18 @@ def _build_requests_fallback_response(url, payload):
 
 
 def _is_browser_error_document(payload, domain):
-    """Detect Chromium network/interstitial error pages returned by --dump-dom.
-
-    These pages are valid HTML and can be mistaken for successful tier-3 fetches.
-    """
     if not payload:
         return False, ""
 
     lower = payload.lower()
 
-    # Strong indicators for Chromium net error documents.
     if "chrome-error://" in lower:
         return True, "chrome-error-scheme"
-    if "id=\"main-frame-error\"" in lower or "id='main-frame-error'" in lower:
+    if 'id="main-frame-error"' in lower or "id='main-frame-error'" in lower:
         return True, "main-frame-error"
     if "this site can" in lower and "be reached" in lower:
         return True, "site-cant-be-reached"
 
-    # Heuristic: Chromium net-error stylesheet + ERR_* token.
     has_err_token = "err_" in lower
     has_neterror_shell = (
         "error-code-color" in lower
@@ -449,7 +452,6 @@ def _is_browser_error_document(payload, domain):
     if has_err_token and has_neterror_shell:
         return True, "chromium-neterror-shell"
 
-    # Heuristic: page title is raw domain on Chromium shell-like page.
     if domain:
         if f"<title>{domain}</title>" in lower and "error-code-color" in lower:
             return True, "domain-title-error-shell"
@@ -468,7 +470,6 @@ def _build_httpx_fallback_response(httpx_module, method, url, payload):
 
 
 async def _try_tier25_then_tier3_async(url, domain, reason):
-    """Async wrapper to keep blocking subprocess work off the event loop."""
     return await asyncio.to_thread(_try_tier25_then_tier3, url, domain, reason)
 
 
@@ -479,13 +480,8 @@ def _domain_from_url(url):
         return ""
 
 
-def _is_loopback_domain(domain):
-    """True for local loopback hosts where browser fallback is never appropriate."""
-    return domain in ("localhost", "127.0.0.1", "::1")
-
-
 def _is_cooling_down(domain):
-    if not domain:
+    if not domain or _is_lemonade_or_local_endpoint(domain):
         return False
 
     now = time.monotonic()
@@ -498,7 +494,7 @@ def _is_cooling_down(domain):
 
 
 def _set_cooldown(domain, reason):
-    if not domain:
+    if not domain or _is_lemonade_or_local_endpoint(domain):
         return
 
     until = time.monotonic() + _DOMAIN_COOLDOWN_SECONDS
@@ -508,16 +504,13 @@ def _set_cooldown(domain, reason):
 
 
 def _record_timeout(domain):
-    """Track per-domain timeout events and trigger tier-3 promotion or
-    cooldown when the blackhole threshold is reached."""
-    if not domain:
+    if not domain or _is_lemonade_or_local_endpoint(domain):
         return
 
     now = time.monotonic()
     cutoff = now - _BLACKHOLE_WINDOW_SECONDS
     with _COOLDOWN_LOCK:
         events = _DOMAIN_TIMEOUT_EVENTS.get(domain, [])
-        # Prune events outside the rolling window
         events = [t for t in events if t > cutoff]
         events.append(now)
         _DOMAIN_TIMEOUT_EVENTS[domain] = events
@@ -535,32 +528,31 @@ def _record_timeout(domain):
 
 
 def _build_timeout(kwargs, domain=""):
-    """Return a split (connect, read) timeout tuple, capping any caller-supplied
-    single-value timeout at _MAX_CALLER_TIMEOUT_SECONDS to prevent long stalls."""
+    """Return appropriate timeout settings, granting Lemonade/local endpoints higher budgets."""
     caller_timeout = kwargs.get("timeout")
 
-    # Do not cap localhost Lemonade requests: model loading/inference can
-    # legitimately exceed external-web timeout ceilings.
-    is_local = domain in ("127.0.0.1", "localhost", "::1")
-    if is_local and caller_timeout is not None:
-        return caller_timeout
+    # If it's Lemonade or local LAN/loopback, provide an extended timeout budget
+    if _is_lemonade_or_local_endpoint(domain):
+        if caller_timeout is None:
+            return (15.0, _LEMONADE_TIMEOUT)
+        if isinstance(caller_timeout, (tuple, list)) and len(caller_timeout) == 2:
+            return (max(float(caller_timeout[0]), 15.0), max(float(caller_timeout[1]), _LEMONADE_TIMEOUT))
+        return max(float(caller_timeout), _LEMONADE_TIMEOUT)
 
+    # Standard public web traffic timeout behavior:
     if caller_timeout is None:
         return (_DEFAULT_CONNECT_TIMEOUT, _DEFAULT_READ_TIMEOUT)
 
-    # Already a tuple/list — cap individual components
     if isinstance(caller_timeout, (tuple, list)) and len(caller_timeout) == 2:
         connect = min(float(caller_timeout[0]), _MAX_CALLER_TIMEOUT_SECONDS)
         read = min(float(caller_timeout[1]), _MAX_CALLER_TIMEOUT_SECONDS)
         return (connect, read)
 
-    # Single numeric value — cap and split
     capped = min(float(caller_timeout), _MAX_CALLER_TIMEOUT_SECONDS)
     return (_DEFAULT_CONNECT_TIMEOUT, capped)
 
 
 def _is_timeout_error(exc):
-    """Return True if an exception represents a connection or read timeout."""
     exc_str = exc.__class__.__name__.lower()
     exc_msg = str(exc).lower()
     return (
@@ -585,31 +577,22 @@ async def _sleep_backoff_async(attempt):
 
 
 def _is_html_response(response):
-    """Check if response content-type indicates HTML or text content.
-    Used to avoid processing binary/JSON responses for content analysis."""
     content_type = (response.headers.get("content-type") or "").lower()
     return "html" in content_type or "text" in content_type
 
 
 def _is_empty_response(response):
-    """Return True if an HTTP 200 response is a JS-only shell (no useful text).
-    This signals tier-2.5 or tier-3 escalation is needed for this domain.
-    Checks body size and presence of JS app markers vs actual text content.
-    """
     if not _is_html_response(response):
-        return False  # Non-HTML content (JSON, binary, etc.) — not empty
+        return False
 
     try:
-        # Use raw bytes to avoid charset decoding overhead
         body = response.content
     except Exception:
         return False
 
-    # Short bodies on HTML pages almost always indicate a JS shell
     if len(body) < _TEXT_BROWSER_EMPTY_THRESHOLD:
         return True
 
-    # Look for JS-app markers in the first 4KB
     try:
         preview = body[:4096].decode("utf-8", errors="replace").lower()
     except Exception:
@@ -621,24 +604,15 @@ def _is_empty_response(response):
 
 
 def _try_tier25_then_tier3(url, domain, reason):
-    """Attempt tier-2.5 (text browser) fetch for a URL that tier-2 HTTP
-    failed or returned an empty page on. If text browser also returns empty,
-    promote to tier-3 (full browser) for future requests to this domain.
-    Returns plain text string if tier-2.5 succeeds, None otherwise.
-    Called only for GET-like requests where text content is expected.
-    """
-    if _is_loopback_domain(domain):
+    if _is_lemonade_or_local_endpoint(domain) or _is_lemonade_or_local_endpoint(url):
         return None
 
     text, empty_signal = _fetch_via_text_browser(url)
 
     if text and not empty_signal:
-        # Tier-2.5 succeeded — return as a pseudo-response payload
-        # (callers that understand plain text can use it; others discard gracefully)
         _log(f"tier-2.5 served domain={domain} reason={reason}")
         return text
 
-    # Any tier-2.5 miss can still attempt tier-3 when available.
     if _ENABLE_BROWSER_RETRIEVER and _BROWSER_AVAILABLE:
         if empty_signal and domain not in _BROWSER_PROMOTED_DOMAINS:
             _BROWSER_PROMOTED_DOMAINS.add(domain)
@@ -658,8 +632,6 @@ def _try_tier25_then_tier3(url, domain, reason):
 
 
 def _is_challenge_response(response):
-    """Detect if response is a challenge/interstitial page (captcha, bot verification, etc.).
-    Used to trigger escalation to Tier 2.5/3 when Tier 2 hits protection."""
     if not _is_html_response(response):
         return False
     try:
@@ -670,8 +642,6 @@ def _is_challenge_response(response):
 
 
 def _is_blocked_response(response):
-    """Detect if response indicates access denial/rate-limiting.
-    Used to trigger escalation to Tier 2.5/3 when Tier 2 is blocked."""
     if not _is_html_response(response):
         return False
     try:
@@ -718,7 +688,7 @@ def _patch_requests():
 
         for attempt in range(max_attempts):
             request_kwargs = dict(kwargs)
-            request_kwargs["timeout"] = _build_timeout(request_kwargs, domain)
+            request_kwargs["timeout"] = _build_timeout(request_kwargs, domain or url)
 
             try:
                 response = original_request(self, method, url, *args, **request_kwargs)
@@ -762,7 +732,6 @@ def _patch_requests():
                     f"status={response.status_code} attempts={attempt + 1} elapsed_ms={elapsed_ms}"
                 )
 
-                # Tier-2.5 check: even a 200 can be a JS-only shell
                 if method_upper in BROWSER_FALLBACK_METHODS and response.status_code == 200 and _is_empty_response(response):
                     _log(f"requests empty-page domain={_safe_domain_str(domain)} → trying tier-2.5")
                     fallback_payload = _try_tier25_then_tier3(url, domain, "http-200-empty")
@@ -789,7 +758,6 @@ def _patch_requests():
                 break
 
         if last_error:
-            # All HTTP attempts exhausted — try tier-2.5 before giving up
             if method_upper in BROWSER_FALLBACK_METHODS:
                 fallback_payload = _try_tier25_then_tier3(url, domain, "http-exhausted")
                 if fallback_payload:
@@ -841,7 +809,7 @@ def _patch_httpx():
 
         for attempt in range(max_attempts):
             request_kwargs = dict(kwargs)
-            request_kwargs["timeout"] = _build_timeout(request_kwargs, domain)
+            request_kwargs["timeout"] = _build_timeout(request_kwargs, domain or str(url))
 
             try:
                 response = original_client_request(self, method, url, *args, **request_kwargs)
@@ -948,7 +916,7 @@ def _patch_httpx():
 
         for attempt in range(max_attempts):
             request_kwargs = dict(kwargs)
-            request_kwargs["timeout"] = _build_timeout(request_kwargs, domain)
+            request_kwargs["timeout"] = _build_timeout(request_kwargs, domain or str(url))
 
             try:
                 response = await original_async_client_request(self, method, url, *args, **request_kwargs)
