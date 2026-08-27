@@ -61,12 +61,32 @@ validate_version_format() {
     fi
 }
 
+# =====================================================================
+# LXD Environment Check
+# =====================================================================
+check_lxd_environment() {
+    echo "INFO: Checking LXD environment..."
+    
+    if ! command -v lxc &>/dev/null; then
+        echo "ERROR: LXC command not found. Please install LXD: sudo apt install lxd"
+        exit 1
+    fi
+    
+    if ! lxc info &>/dev/null; then
+        echo "ERROR: Cannot communicate with LXD daemon. Please ensure LXD is running."
+        exit 1
+    fi
+    
+    echo "INFO: LXD environment appears to be working correctly."
+}
+
 GLOBAL_START_TIME=$SECONDS
 
 # =====================================================================
 # Build configuration
 # =====================================================================
-export CRAFT_PARALLEL_BUILD_COUNT=8
+export CRAFT_PARALLEL_BUILD_COUNT=2
+#export SNAPCRAFT_BUILD_ENVIRONMENT=lxd
 
 # Optional host tuning commands (disabled by default)
 #sudo apt install cpulimit
@@ -76,7 +96,7 @@ export CRAFT_PARALLEL_BUILD_COUNT=8
 # =====================================================================
 # GLOBAL WORKSPACE VARIABLE DEFINITIONS
 # =====================================================================
-GLOBAL_DEFAULT_VERSION="0.22.0"
+GLOBAL_DEFAULT_VERSION="0.23.0"
 
 VERSION_CACHE_FILE=".last_version"
 GAIA_VERSION=""
@@ -130,6 +150,7 @@ echo "INFO: Starting build pipeline for GAIA version: $GAIA_VERSION"
 # Validate version format and required tools before proceeding
 validate_version_format "$GAIA_VERSION"
 validate_required_tools
+check_lxd_environment
 
 # =====================================================================
 # HELPER: Clear stale snapcraft LXD instances for this project
@@ -255,7 +276,8 @@ if [ "$BUILD_SNAP" = true ] || [ "$BUILD_OCI" = true ] || [ "$BUILD_DOCKER" = tr
     chmod +x gaia-launcher.sh
 
     echo "INFO: Running snapcraft pack."
-    snapcraft pack
+    export SNAPCRAFT_CONTAINER_BUILDS_REQUIRE_AUTOPROXY=0
+    SNAPCRAFT_BUILD_ENVIRONMENT=lxd snapcraft pack
 
     DIFF_SNAP=$((SECONDS - START_SNAP))
     TIME_SNAP="$((DIFF_SNAP / 60))m $((DIFF_SNAP % 60))s"

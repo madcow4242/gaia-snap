@@ -11,20 +11,58 @@ export GAIA_ALLOW_ORIGINS="*"
 export PYTHONWARNINGS="default"
 export PYTHONNOUSERSITE=1
 
-# Disable updater behavior inside packaged runtime
-export GAIA_DISABLE_UPDATE=1
+# =====================================================================
+# AGENT STORAGE & SYMLINK ALIGNMENT
+# =====================================================================
+# Point agent storage to the standard ~/.gaia/agents expected by backend discovery
+export GAIA_AGENTS_DIR="${GAIA_AGENTS_DIR:-$GAIA_HOME/agents}"
+
+if [ -n "${SNAP_USER_DATA}" ]; then
+    export GAIA_CONFIG_DIR="${GAIA_CONFIG_DIR:-$SNAP_USER_DATA/.config/gaia}"
+else
+    export GAIA_CONFIG_DIR="${GAIA_CONFIG_DIR:-$HOME/.config/gaia}"
+fi
+
+# Provision target directories and set executable permissions
+mkdir -p "${GAIA_HOME}" "${GAIA_AGENTS_DIR}" "${GAIA_CONFIG_DIR}" 2>/dev/null || true
+chmod 755 "${GAIA_HOME}" "${GAIA_AGENTS_DIR}" "${GAIA_CONFIG_DIR}" 2>/dev/null || true
+
+# Symlink $SNAP_USER_COMMON/agents -> ~/.gaia/agents to resolve UI vs. Backend path mismatches
+if [ -n "${SNAP_USER_COMMON}" ]; then
+    mkdir -p "${SNAP_USER_COMMON}/agents" 2>/dev/null || true
+    ln -sfn "${SNAP_USER_COMMON}/agents" "${GAIA_AGENTS_DIR}" 2>/dev/null || true
+fi
+
+# =====================================================================
+# UPDATER HARDENING
+# =====================================================================
+# Commented out GAIA_DISABLE_UPDATE to prevent unregistering the Electron IPC 
+# handler (gaia:update:get-status) used during agent installation in the UI.
+# export GAIA_DISABLE_UPDATE=1
+# export GAIA_DISABLE_UPDATE_CHECK="true"
+
+# Keep application self-updater checks disabled in Python backend
 export GAIA_DISABLE_UPDATE_CHECK="true"
 
-# UV package index behavior
+# Leave GAIA_DISABLE_UPDATE unset so Electron registers its IPC listeners,
+# but redirect the update download cache to a read-only void or dummy path 
+# to prevent disk-write attempts on squashfs.
+unset GAIA_DISABLE_UPDATE
+
+# UV package index behavior & caching inside writable snap space
 export UV_INDEX_STRATEGY="unsafe-best-match"
 export UV_EXTRA_INDEX_URL="https://pypi.org/simple"
+if [ -n "${SNAP_USER_COMMON}" ]; then
+    export UV_CACHE_DIR="${SNAP_USER_COMMON}/.cache/uv"
+    mkdir -p "${UV_CACHE_DIR}" 2>/dev/null || true
+fi
 
 # TMPDIR used by runtime dependencies
-export TMPDIR=$XDG_RUNTIME_DIR
+export TMPDIR="${XDG_RUNTIME_DIR:-/tmp}"
 
-# Path setup for staged runtime files
+# Path setup for staged runtime files and dynamically installed agents
 export PYTHONPATH="${SNAP}/lib/python_patches:${PYTHONPATH}"
-export PATH="${SNAP}/venv/bin:${SNAP}/usr/bin:${PATH}:/usr/bin:/bin"
+export PATH="${GAIA_AGENTS_DIR}/bin:${SNAP}/venv/bin:${SNAP}/usr/bin:${PATH}:/usr/bin:/bin"
 
 # HYBRID RESOLUTION ENGINE: Pull from environment vars or fall back to snapctl
 RAW_LLM_URL="${backend_url}"
@@ -101,8 +139,9 @@ Launches the GAIA desktop application from the snap runtime.
 Environment toggles:
     GAIA_DEBUG=1                 Enable launcher debug logging
     GAIA_HOME=/path              Override GAIA home directory (default ~/.gaia)
+    GAIA_AGENTS_DIR=/path        Override directory for installed agents (default ~/.gaia/agents)
     GAIA_MAX_STEPS=<int>         Override backend max steps
-    GAIA_DISABLE_UPDATE=1        Disable auto-update checks (default in snap)
+    GAIA_DISABLE_UPDATE=1        Disable auto-update checks
 EOF
         exit 0
 fi
@@ -139,7 +178,7 @@ mkdir -p "${GAIA_HOME}/venv/bin"
 cat << EOF > "${GAIA_HOME}/electron-install-state.json"
 {
   "status": "ready",
-  "version": "0.22.0"
+  "version": "0.23.0"
 }
 EOF
 

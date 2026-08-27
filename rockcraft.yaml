@@ -3,7 +3,7 @@ summary: OCI container runtime for GAIA
 description: |
   OCI-compliant container packaging for the GAIA framework
   using a minimal runtime base.
-version: &global_version "0.22.0"
+version: &global_version "0.23.0"
 license: MIT
 
 base: bare

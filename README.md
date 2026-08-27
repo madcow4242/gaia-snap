@@ -1,7 +1,7 @@
 # 🚀 GAIA Desktop Framework Engine 
 ### (Classic Snap Build Environment)
 
-**GAIA Version:** Current version: 0.22.0
+**GAIA Version:** Current version: 0.23.0
 
 This repository contains the production deployment blueprints for packaging [AMD's GAIA framework](https://github.com/amd/gaia) as a portable Linux Snap configured under Classic Confinement as `gaia-desktop`.  It also builds an OCI-compliant container image (Rock) and LXD-, Docker-, and Podman-compatible container images.  There is an installer script to help automate installing via your preferred route.
 

@@ -9,7 +9,7 @@ set -euo pipefail
 
 WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAST_VERSION_FILE="${WORKSPACE_DIR}/.last_version"
-DEFAULT_VERSION="0.22.0"
+DEFAULT_VERSION="0.23.0"
 TARGET_VERSION=""
 TOTAL_PURGE=false
 

@@ -43,9 +43,15 @@ apps:
   gaia-desktop:
     command: bin/gaia-launcher.sh
     desktop: usr/share/applications/gaia-desktop.desktop
+    environment:
+      # Force GAIA to use writable snap user space for dynamically installed agents
+      GAIA_AGENTS_DIR: "$SNAP_USER_COMMON/agents"
+      GAIA_CONFIG_DIR: "$SNAP_USER_DATA/.config/gaia"
+      PATH: "$SNAP/bin:$SNAP/usr/bin:$PATH"
     plugs:
       - network
       - network-bind
+      - home  # Allow access to user's home directory for agent installations
 
 parts:
   # part 1: build python backend runtime
@@ -61,8 +67,8 @@ parts:
       - python3-setuptools
       - git
     override-build: |
-      # Allow GAIA_VERSION override from build environment; default to 0.22.0
-      VERSION_TAG="0.22.0"
+      # Allow GAIA_VERSION override from build environment; default to 0.23.0
+      VERSION_TAG="0.23.0"
        
       echo "LOG: Setting snap version metadata: ${VERSION_TAG}"
       craftctl set version="${VERSION_TAG}"
@@ -105,11 +111,15 @@ parts:
           return 1
         }
 
-        # Check browser agent across potential layout changes (0.20.0 vs 0.22.0+)
+        # Check browser agent across potential layout changes (0.20.0 vs 0.22.0+ vs 0.23.0+)
+        # The agent structure changed in v0.23.0 from "hub/agents/python/<agent>" to "hub/agents/<agent>/<lang>"
         for candidate in \
           "hub/agents/python/browser" \
           "hub/agents/python/browser-lite" \
           "hub/agents/python/browser_lite" \
+          "hub/agents/browser" \
+          "hub/agents/browser-lite" \
+          "hub/agents/browser_lite" \
           "agents/browser" \
           "agents/browser-lite" \
           "agents/browser_lite"; do
@@ -124,9 +134,14 @@ parts:
         fi
 
         # Optional extras: install local agents if present across legacy and current locations.
+        # Updated to support new agent-first layout in v0.23.0 and maintain backward compatibility
         OPTIONAL_AGENTS="analyst code connectors-demo docqa email routing docker fileio jira summarize sd blender emr"
         for optional_agent in ${OPTIONAL_AGENTS}; do
+          # Try new agent-first layout first (0.23.0+)
+          install_agent_if_present "hub/agents/${optional_agent}/python" || \
+          # Then try legacy layout (0.22.0 and earlier)
           install_agent_if_present "hub/agents/python/${optional_agent}" || \
+          # Finally try old layout (pre-0.22.0)
           install_agent_if_present "agents/${optional_agent}" || true
         done
       else
