@@ -201,9 +201,28 @@ try:
 
     _orig_fastapi_init = fastapi.applications.FastAPI.__init__
 
+    # Force the UI System Status widget to report Lemonade Server as running
+    def inject_status_override_router(app: FastAPI):
+        status_router = APIRouter(prefix="/api/system")
+
+        @status_router.get("/status")
+        async def override_system_status():
+            return {
+                "lemonade_running": True,
+                "lemonade_url": os.environ.get("LEMONADE_BASE_URL", "http://127.0.0.1:13305/api/v1"),
+                "status": "online",
+                "mode": "remote"
+            }
+
+        app.include_router(status_router)
+
+    # Wrap FastAPI init to include the status route patch
+    _orig_fastapi_init = fastapi.applications.FastAPI.__init__
+
     def patched_fastapi_init(self, *args, **kwargs):
         _orig_fastapi_init(self, *args, **kwargs)
         inject_fallback_router(self)
+        inject_status_override_router(self)
 
     fastapi.applications.FastAPI.__init__ = patched_fastapi_init
 
