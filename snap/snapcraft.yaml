@@ -44,10 +44,13 @@ apps:
     command: bin/gaia-launcher.sh
     desktop: usr/share/applications/gaia-desktop.desktop
     environment:
-      # Force GAIA to use writable snap user space for dynamically installed agents
+      # Expose Python venv binaries so sub-agents can find python and executables
+      PATH: "$SNAP/venv/bin:$SNAP/bin:$SNAP/usr/bin:$PATH"
+      # Allow Python to load sitecustomize.py and sideloaded patches from gaia-sideloads
+      PYTHONPATH: "$SNAP/lib/python_patches:$SNAP/venv/lib/python3.12/site-packages:$PYTHONPATH"
+      # Use SNAP_USER_COMMON so config persists across snap updates and matches user space
       GAIA_AGENTS_DIR: "$SNAP_USER_COMMON/agents"
-      GAIA_CONFIG_DIR: "$SNAP_USER_DATA/.config/gaia"
-      PATH: "$SNAP/bin:$SNAP/usr/bin:$PATH"
+      GAIA_CONFIG_DIR: "$SNAP_USER_COMMON/.config/gaia"
     plugs:
       - network
       - network-bind
@@ -105,7 +108,7 @@ parts:
           local target_path="${CRAFT_PART_SRC}/cloned-framework/${agent_rel_path}"
           if [ -d "${target_path}" ]; then
             echo "LOG: Installing local GAIA agent package: ${agent_rel_path}"
-            "${CRAFT_PART_INSTALL}/venv/bin/pip" install "${target_path}"
+            "${CRAFT_PART_INSTALL}/venv/bin/pip" install --no-cache-dir --no-deps "${target_path}"
             return 0
           fi
           return 1

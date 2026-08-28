@@ -1,103 +1,128 @@
 """
 GAIA runtime compatibility patch layer.
-Provides loader fallbacks and sandbox-related runtime hooks.
+Provides loader fallbacks, sandbox-related runtime hooks, and Lemonade endpoint synchronization.
 """
 
 import os
 import sys
 import ctypes
-import threading  # Global tracking anchor
-
+import threading
 
 def _env_flag(name, default="1"):
     value = os.environ.get(name, default)
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
-# ctypes loader override for missing optional shared libraries
+# =====================================================================
+# 1. LEMONADE / GAIA REMOTE ROUTING ENFORCEMENT (0.23.0 FIX)
+# =====================================================================
+# Ensures child sub-agents and worker threads inherit remote endpoints even
+# if environment variables were scrubbed or initialized late.
+lemonade_url = os.environ.get("LEMONADE_BASE_URL") or os.environ.get("GAIA_BACKEND_URL")
+if lemonade_url:
+    clean_base = lemonade_url.rstrip("/")
+    if not clean_base.endswith("/api/v1"):
+        api_url = f"{clean_base}/api/v1"
+        host_url = clean_base
+    else:
+        api_url = clean_base
+        host_url = clean_base.rsplit("/api/v1", 1)[0]
+
+    os.environ["LEMONADE_BASE_URL"] = api_url
+    os.environ["GAIA_LLM_URL"] = host_url
+    os.environ["GAIA_BACKEND_URL"] = api_url
+
+    # Directly patch low-level module defaults in GAIA 0.23.0 if imported early
+    for mod_name in ("gaia.config", "gaia.llm.lemonade_client", "gaia.agents.base.agent"):
+        if mod_name in sys.modules:
+            mod = sys.modules[mod_name]
+            if hasattr(mod, "DEFAULT_LEMONADE_URL"):
+                setattr(mod, "DEFAULT_LEMONADE_URL", api_url)
+            if hasattr(mod, "DEFAULT_BASE_URL"):
+                setattr(mod, "DEFAULT_BASE_URL", api_url)
+            if hasattr(mod, "LEMONADE_BASE_URL"):
+                setattr(mod, "LEMONADE_BASE_URL", api_url)
+
+# =====================================================================
+# 2. CTYPES LOADER OVERRIDE
+# =====================================================================
 _original_cdll = ctypes.CDLL
 
 def patched_cdll(name, mode=ctypes.RTLD_GLOBAL, *args, **kwargs):
     try:
-        # Run the standard linker lookup first
         return _original_cdll(name, mode, *args, **kwargs)
     except OSError as err:
-        # If a library fails to load, try libm as a conservative fallback.
-        # This helps some runtime checks continue on CPU-only systems.
         try:
             return _original_cdll('libm.so.6', mode=mode)
         except Exception:
             pass
-        # Fallback to raising the original error if even libm is unreachable
         raise err
 
-# Register patched loader
 ctypes.CDLL = patched_cdll
 
-
-# Disable CUDA initialization in packaged runtime
+# Disable CUDA initialization in packaged runtime if unsupported
 try:
     import torch
     torch.cuda.is_available = lambda: False
     torch._C._cuda_init = lambda: None
 except (ImportError, AttributeError):
-    # PyTorch not installed or different version; skip CUDA disabling
     pass
 
-
-# Disable updater behavior in packaged environment
-os.environ["GAIA_DISABLE_UPDATE"] = "1"
+# Keep python-level update checks disabled without unregistering Electron IPC
 os.environ["GAIA_DISABLE_UPDATE_CHECK"] = "true"
 
-# Optional network reliability transport hooks.
-# Set GAIA_ENABLE_NETWORK_RELIABILITY=0 to disable this patch family.
+# =====================================================================
+# 3. NETWORK RELIABILITY HOOKS
+# =====================================================================
 if _env_flag("GAIA_ENABLE_NETWORK_RELIABILITY", "1"):
     try:
         from network_reliability import install_network_reliability
-
         install_network_reliability()
     except (ImportError, AttributeError, ModuleNotFoundError) as net_patch_err:
         sys.stderr.write(f"WARNING: Network reliability hooks not installed: {net_patch_err}\n")
         sys.stderr.flush()
 
-
-# Ensure agent fallback model does not silently jump to heavyweight 35B.
-# Upstream may invoke Agent(..., model_id=None) on some flows, which currently
-# defaults to Qwen3.5-35B-A3B-GGUF in Agent.__init__. This patch keeps fallback
-# aligned with the configured/default runtime model unless explicitly disabled.
+# =====================================================================
+# 4. DEFAULT AGENT FALLBACK MODEL & BACKWARD COMPATIBILITY HARNESS
+# =====================================================================
 if _env_flag("GAIA_ENFORCE_DEFAULT_MODEL_FALLBACK", "1"):
     try:
+        import inspect
         from gaia.agents.base.agent import Agent
         from gaia.llm.lemonade_client import DEFAULT_MODEL_NAME
 
         _original_agent_init = Agent.__init__
+        _agent_init_sig = inspect.signature(_original_agent_init)
 
         def patched_agent_init(self, *args, **kwargs):
+            # Strip legacy 0.22.0 parameters (like 'rag_documents') if 0.23.0 Agent.__init__ doesn't accept them
+            accepted_params = _agent_init_sig.parameters
+            if "kwargs" not in accepted_params:
+                kwargs = {k: v for k, v in kwargs.items() if k in accepted_params}
+
             if kwargs.get("model_id") is None:
-                # Priority: explicit override -> Lemonade env model -> GAIA default.
                 forced_model = (
                     os.environ.get("GAIA_FORCED_AGENT_MODEL")
                     or os.environ.get("LEMONADE_MODEL")
                     or DEFAULT_MODEL_NAME
                 )
                 kwargs["model_id"] = forced_model
+
             return _original_agent_init(self, *args, **kwargs)
 
         Agent.__init__ = patched_agent_init
-        print("INFO: Agent fallback model patch installed.", flush=True)
+        print("INFO: Agent fallback & signature compatibility patch installed.", flush=True)
     except (ImportError, AttributeError, ModuleNotFoundError) as model_patch_err:
         sys.stderr.write(f"WARNING: Agent fallback model patch not installed: {model_patch_err}\n")
         sys.stderr.flush()
 
+# =====================================================================
+# 5. FASTAPI & SSE TOOL CONFIRMATION INTEGRATION
+# =====================================================================
 PENDING_TICKETS = {}
 TICKET_LOCK = threading.Lock()
 
-
-# Optional integration hooks for FastAPI and SSE tool confirmation
 try:
-    # Import inside this block so the patch remains optional when modules are absent
-    import sys
     import uuid
-    import threading
     import fastapi.applications
     from fastapi import FastAPI, APIRouter
     from pydantic import BaseModel
@@ -138,12 +163,11 @@ try:
             "timeout_seconds": timeout,
         })
 
-        print("INFO: Monitoring pending tool request token: [" + str(confirm_id) + "]", flush=True)
+        print(f"INFO: Monitoring pending tool request token: [{confirm_id}]", flush=True)
 
-        # Auto-approve in headless mode
         with TICKET_LOCK:
             if confirm_id in PENDING_TICKETS:
-                print("INFO: Auto-approving pending tool request token: [" + str(confirm_id) + "]", flush=True)
+                print(f"INFO: Auto-approving pending tool request token: [{confirm_id}]", flush=True)
                 PENDING_TICKETS[confirm_id]["status"] = "approved"
                 event_signal.set()
 
@@ -156,7 +180,6 @@ try:
 
         return False
 
-    # Override interactive confirmation method
     sse_mod.SSEOutputHandler.confirm_tool_execution = patched_confirm_tool_execution
     print("INFO: Tool confirmation hook installed.", flush=True)
 
@@ -165,7 +188,7 @@ try:
 
         @custom_router.post("/resolve")
         async def resolve_sandbox_ticket(payload: DirectResolutionPayload):
-            print("INFO: Received token resolution request: " + str(payload.confirm_id), flush=True)
+            print(f"INFO: Received token resolution request: {payload.confirm_id}", flush=True)
             with TICKET_LOCK:
                 if payload.confirm_id in PENDING_TICKETS:
                     PENDING_TICKETS[payload.confirm_id]["status"] = "approved" if payload.approved else "denied"
@@ -185,5 +208,5 @@ try:
     fastapi.applications.FastAPI.__init__ = patched_fastapi_init
 
 except (ImportError, AttributeError, ModuleNotFoundError) as bootstrap_err:
-    sys.stderr.write(f"ERROR: Sandbox runtime extension hooks not installed (missing modules): {bootstrap_err}\n")
+    sys.stderr.write(f"WARNING: Sandbox runtime extension hooks skipped (missing dependencies): {bootstrap_err}\n")
     sys.stderr.flush()

@@ -269,6 +269,13 @@ if [ "$BUILD_SNAP" = true ] || [ "$BUILD_OCI" = true ] || [ "$BUILD_DOCKER" = tr
     START_SNAP=$SECONDS
     echo "INFO: Building Snap package from workspace."
 
+    echo "INFO: Performing full purge of previous Snap build outputs and cached environments."
+    sudo rm -f *.snap
+    # Clean ALL steps (pull, build, stage, prime) to purge cached python wheels
+    sudo snapcraft clean gaia-desktop >/dev/null 2>&1 || true
+    sudo snapcraft clean gaia-backend >/dev/null 2>&1 || true
+    sudo snapcraft clean gaia-sideloads >/dev/null 2>&1 || true
+
     # Prevent stale managed-instance/device conflicts from prior interrupted builds.
     cleanup_stale_snapcraft_instances
 
@@ -335,7 +342,7 @@ if [ "$BUILD_DOCKER" = true ]; then
             sudo chmod 644 "./gaia-desktop_${GAIA_VERSION}_docker-image.tar"
             sudo chown $(id -u):$(id -g) "./gaia-desktop_${GAIA_VERSION}_docker-image.tar"
         fi
-fi
+
         echo "INFO: Loading Docker archive into local Docker daemon."
         docker load -i "./${DOCKER_OUTPUT_NAME}"
     fi

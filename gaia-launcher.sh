@@ -11,13 +11,19 @@ export GAIA_ALLOW_ORIGINS="*"
 export PYTHONWARNINGS="default"
 export PYTHONNOUSERSITE=1
 
+# Bypass proxies for Lemonade / GAIA internal traffic
+export NO_PROXY="127.0.0.1,localhost,${REMOTE_HOST},${NO_PROXY}"
+export no_proxy="127.0.0.1,localhost,${REMOTE_HOST},${no_proxy}"
+
 # =====================================================================
 # AGENT STORAGE & SYMLINK ALIGNMENT
 # =====================================================================
 # Point agent storage to the standard ~/.gaia/agents expected by backend discovery
 export GAIA_AGENTS_DIR="${GAIA_AGENTS_DIR:-$GAIA_HOME/agents}"
 
-if [ -n "${SNAP_USER_DATA}" ]; then
+if [ -n "${SNAP_USER_COMMON}" ]; then
+    export GAIA_CONFIG_DIR="${GAIA_CONFIG_DIR:-$SNAP_USER_COMMON/.config/gaia}"
+elif [ -n "${SNAP_USER_DATA}" ]; then
     export GAIA_CONFIG_DIR="${GAIA_CONFIG_DIR:-$SNAP_USER_DATA/.config/gaia}"
 else
     export GAIA_CONFIG_DIR="${GAIA_CONFIG_DIR:-$HOME/.config/gaia}"
@@ -36,17 +42,11 @@ fi
 # =====================================================================
 # UPDATER HARDENING
 # =====================================================================
-# Commented out GAIA_DISABLE_UPDATE to prevent unregistering the Electron IPC 
-# handler (gaia:update:get-status) used during agent installation in the UI.
-# export GAIA_DISABLE_UPDATE=1
-# export GAIA_DISABLE_UPDATE_CHECK="true"
-
 # Keep application self-updater checks disabled in Python backend
 export GAIA_DISABLE_UPDATE_CHECK="true"
 
 # Leave GAIA_DISABLE_UPDATE unset so Electron registers its IPC listeners,
-# but redirect the update download cache to a read-only void or dummy path 
-# to prevent disk-write attempts on squashfs.
+# but redirect update cache to writable snap common
 unset GAIA_DISABLE_UPDATE
 
 # UV package index behavior & caching inside writable snap space
@@ -61,30 +61,63 @@ fi
 export TMPDIR="${XDG_RUNTIME_DIR:-/tmp}"
 
 # Path setup for staged runtime files and dynamically installed agents
-export PYTHONPATH="${SNAP}/lib/python_patches:${PYTHONPATH}"
+export PYTHONPATH="${SNAP}/lib/python_patches:${SNAP}/venv/lib/python3.12/site-packages:${PYTHONPATH}"
 export PATH="${GAIA_AGENTS_DIR}/bin:${SNAP}/venv/bin:${SNAP}/usr/bin:${PATH}:/usr/bin:/bin"
 
-# HYBRID RESOLUTION ENGINE: Pull from environment vars or fall back to snapctl
+# =====================================================================
+# HYBRID RESOLUTION ENGINE: BACKEND & REMOTE LEMONADE MAPPING
+# =====================================================================
 RAW_LLM_URL="${backend_url}"
+
+# Read backend URL from global snap configuration if present
+if [ -z "$RAW_LLM_URL" ] && [ -f "${SNAP_COMMON}/etc/gaia/config.json" ]; then
+    RAW_LLM_URL=$(grep -o '"url": "[^"]*"' "${SNAP_COMMON}/etc/gaia/config.json" | head -n 1 | cut -d'"' -f4)
+fi
+
 if [ -z "$RAW_LLM_URL" ] && command -v snapctl &>/dev/null; then
     RAW_LLM_URL=$(snapctl get backend.url 2>/dev/null || true)
 fi
+
 if [ -z "$RAW_LLM_URL" ]; then
     RAW_LLM_URL="http://127.0.0.1:13305"
 fi
 
 # Validate critical LLM URL setting
 if [ -z "$RAW_LLM_URL" ] || [ "$RAW_LLM_URL" = "null" ]; then
-    echo "ERROR: Failed to resolve LLM backend URL from any source (env var, snapctl, hardcoded default). This is a critical configuration error." >&2
-    echo "DEBUG: Attempted sources: backend_url env var, snapctl backend.url, hardcoded default http://127.0.0.1:13305" >&2
+    echo "ERROR: Failed to resolve LLM backend URL from any source. This is a critical configuration error." >&2
     exit 1
 fi
 
-export GAIA_LLM_URL="${RAW_LLM_URL}"
-export LEMONADE_BASE_URL="${RAW_LLM_URL}/api/v1"
+# Normalize URL slashes and set standard GAIA 0.23.0 environment routing variables
+CLEAN_LLM_URL=$(echo "$RAW_LLM_URL" | sed 's:/*$::')
 
-[ "${GAIA_DEBUG}" = "1" ] && echo "INFO [DEBUG]: Resolved LLM URL to: ${GAIA_LLM_URL} (from backend_url env var or snapctl)" >&2
-echo "INFO: Classic Mode: Directing outbound AI model traffic to target server layout: ${GAIA_LLM_URL}"
+if [[ "$CLEAN_LLM_URL" == */api/v1* ]]; then
+    EXPORT_BASE_URL="$CLEAN_LLM_URL"
+    CLEAN_HOST_URL=$(echo "$CLEAN_LLM_URL" | sed 's|/api/v1||')
+else
+    EXPORT_BASE_URL="${CLEAN_LLM_URL}/api/v1"
+    CLEAN_HOST_URL="$CLEAN_LLM_URL"
+fi
+
+export GAIA_LLM_URL="${CLEAN_HOST_URL}"
+export LEMONADE_BASE_URL="${EXPORT_BASE_URL}"
+export GAIA_BACKEND_URL="${EXPORT_BASE_URL}"
+
+[ "${GAIA_DEBUG}" = "1" ] && echo "INFO [DEBUG]: Resolved LLM URL to: ${GAIA_LLM_URL} | Lemonade: ${LEMONADE_BASE_URL}" >&2
+echo "INFO: Classic Mode: Directing outbound AI model traffic to target server layout: ${LEMONADE_BASE_URL}"
+
+# Write config manifest directly into user context to guarantee isolation safety
+cat << EOF > "${GAIA_HOME}/config.json"
+{
+  "llm_url": "${CLEAN_HOST_URL}",
+  "backend": {
+    "url": "${EXPORT_BASE_URL}",
+    "max_steps": ${GAIA_MAX_STEPS:-50}
+  },
+  "profile": "minimal"
+}
+EOF
+cp "${GAIA_HOME}/config.json" "${GAIA_CONFIG_DIR}/config.json" 2>/dev/null || true
 
 # Resolve optional provider API keys from env vars or snapctl
 for service in openai anthropic groq tavily serper; do
@@ -125,7 +158,7 @@ fi
 
 export GAIA_MAX_STEPS="${MAX_STEPS}"
 [ "${GAIA_DEBUG}" = "1" ] && echo "INFO [DEBUG]: Resolved max-steps to: $GAIA_MAX_STEPS" >&2
-echo "[CONFIG] Set max-steps to $GAIA_MAX_STEPS "
+echo "[CONFIG] Set max-steps to $GAIA_MAX_STEPS"
 
 export HTTP_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 export REBUILD_USER_AGENT="${HTTP_USER_AGENT}"
@@ -146,8 +179,7 @@ EOF
         exit 0
 fi
 
-# Select the desktop entrypoint deterministically; broad file scans can pick
-# non-launcher binaries in Electron bundles and fail with exec format errors.
+# Select the desktop entrypoint deterministically
 if [ -x "$SNAP/opt/GAIA/.gaia-desktop-bin" ]; then
     TARGET_EXEC="$SNAP/opt/GAIA/.gaia-desktop-bin"
 elif [ -x "$SNAP/opt/GAIA/gaia-desktop" ]; then
@@ -159,7 +191,7 @@ fi
 
 echo "LOG: Synchronizing local workspace sentinel states..."
 if [ -z "$SNAP_VERSION" ]; then
-    SNAP_VERSION="0.22.0"
+    SNAP_VERSION="0.23.0"
 fi
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -194,14 +226,10 @@ if [ "\$1" = "chat" ]; then
     args=(\"\$@\")
     for ((i=0; i<\${#args[@]}; i++)); do
         if [ "\${args[i]}" = "--ui-port" ]; then
-            # Clean and strip quotes/whitespace from the port input string safely
             DYNAMIC_PORT=\$(echo "\${args[i+1]}" | tr -d '"\r\n ')
         fi
     done
 
-    # Absolute fallback routing drop-out preventing cyclic interpreter wrapper loops.
-    # Run child in background so we can probe readiness, but forward termination
-    # signals to avoid orphaning the backend process on GUI exit.
     "${SNAP}/venv/bin/python3" "${SNAP}/venv/bin/gaia" "\$@" &
     BACKEND_PID=\$!
 
@@ -213,7 +241,6 @@ if [ "\$1" = "chat" ]; then
     trap _forward_exit INT TERM
 
     timeout=40
-    # Probe backend readiness without external netcat dependency.
     while [ \$timeout -gt 0 ]; do
         if "${SNAP}/venv/bin/python3" - "\$DYNAMIC_PORT" <<'PY'
 import socket
@@ -253,6 +280,47 @@ echo "INFO: Launching GAIA desktop runtime."
 # Electron stability flags for constrained environments
 export ELECTRON_DISABLE_GPU=1
 export ELECTRON_SKIP_BINARY_DOWNLOAD=1
+
+
+# Transparently forward local port 13305 to remote Lemonade Server if using remote host
+REMOTE_HOST=$(echo "$LEMONADE_BASE_URL" | sed -E 's|https?://([^:/]+).*|\1|')
+REMOTE_PORT=$(echo "$LEMONADE_BASE_URL" | sed -E 's|https?://[^:]+:([0-9]+).*|\1|')
+REMOTE_PORT=${REMOTE_PORT:-13305}
+
+if [ "$REMOTE_HOST" != "127.0.0.1" ] && [ "$REMOTE_HOST" != "localhost" ]; then
+    echo "INFO: Enabling local loopback proxy (127.0.0.1:13305 -> ${REMOTE_HOST}:${REMOTE_PORT}) for UI health checks..."
+    
+    python3 -c "
+import socket, threading
+
+def forward(src, dst):
+    while True:
+        data = src.recv(4096)
+        if not data: break
+        dst.sendall(data)
+
+def handle(cli, r_host, r_port):
+    try:
+        srv = socket.create_connection((r_host, r_port))
+        threading.Thread(target=forward, args=(cli, srv), daemon=True).start()
+        threading.Thread(target=forward, args=(srv, cli), daemon=True).start()
+    except Exception:
+        cli.close()
+
+def main():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind(('127.0.0.1', 13305))
+    s.listen(10)
+    while True:
+        cli, _ = s.accept()
+        threading.Thread(target=handle, args=(cli, '${REMOTE_HOST}', ${REMOTE_PORT}), daemon=True).start()
+
+main()
+" &
+fi
+
+
 
 exec "$TARGET_EXEC" \
     --no-sandbox \

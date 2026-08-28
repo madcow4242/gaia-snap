@@ -69,15 +69,14 @@ TEXT_CONTENT_MARKERS = (
 
 # Split connect/read timeout: TCP-connect blackholes are caught in 5s;
 # slow-read / body-stall blackholes are caught in 8s.
-# These are OUR defaults; callers that explicitly pass their own timeout will
-# have it capped at _MAX_CALLER_TIMEOUT_SECONDS to prevent long stalls.
 _DEFAULT_CONNECT_TIMEOUT = float(os.environ.get("GAIA_CONNECT_TIMEOUT", "5"))
 _DEFAULT_READ_TIMEOUT = float(os.environ.get("GAIA_READ_TIMEOUT", "8"))
 # Hard cap on any caller-supplied timeout for public web traffic.
 _MAX_CALLER_TIMEOUT_SECONDS = float(os.environ.get("GAIA_MAX_CALLER_TIMEOUT", "8"))
 
-# Timeout budget specifically for local Lemonade / LLM endpoints (defaults to 300s / 5 mins)
-_LEMONADE_TIMEOUT = float(os.environ.get("GAIA_LEMONADE_TIMEOUT", "300.0"))
+# Timeout budget specifically for Lemonade / LLM endpoints.
+# Set to 1800s (30 minutes) by default to prevent timing out on long inference generations.
+_LEMONADE_TIMEOUT = float(os.environ.get("GAIA_LEMONADE_TIMEOUT", "1800.0"))
 
 _MAX_RETRIES = 0
 _BACKOFF_BASE_SECONDS = 0.6
@@ -104,7 +103,6 @@ def _env_flag(name, default="1"):
 
 
 # Diagnostics are enabled by default for initial rollout and can be disabled.
-# Tier-3 browser retriever is also enabled by default when a browser is found.
 _LOG_ENABLED = _env_flag("GAIA_NETWORK_RELIABILITY_LOG", "1")
 _ENABLE_BROWSER_RETRIEVER = _env_flag("GAIA_ENABLE_BROWSER_RETRIEVER", "1")
 _ENABLE_TEXT_BROWSER = _env_flag("GAIA_ENABLE_TEXT_BROWSER", "1")
@@ -114,8 +112,6 @@ _BROWSER_REQUIRED_DOMAINS = {
     for d in os.environ.get("GAIA_BROWSER_REQUIRED_DOMAINS", "").split(",")
     if d.strip()
 }
-# Minimum meaningful byte count for a text-browser fetch; below this threshold
-# the page is considered empty/JS-only and escalation to tier-3 is triggered.
 _TEXT_BROWSER_EMPTY_THRESHOLD = int(os.environ.get("GAIA_TEXT_BROWSER_EMPTY_THRESHOLD", "512"))
 
 
@@ -135,6 +131,14 @@ def _is_lemonade_or_local_endpoint(domain_or_url: str) -> bool:
     if not domain_or_url:
         return False
 
+    # Check against environment routing variables configured for Lemonade
+    configured_lemonade = os.environ.get("LEMONADE_BASE_URL", "")
+    configured_llm = os.environ.get("GAIA_LLM_URL", "")
+    if configured_lemonade and configured_lemonade in domain_or_url:
+        return True
+    if configured_llm and configured_llm in domain_or_url:
+        return True
+
     domain = _domain_from_url(domain_or_url) if "://" in domain_or_url else domain_or_url
     domain_clean = domain.split(":")[0].strip().lower()
 
@@ -149,8 +153,8 @@ def _is_lemonade_or_local_endpoint(domain_or_url: str) -> bool:
     except ValueError:
         pass
 
-    # Check for Lemonade API path signature in URL
-    if "/api/v1/" in domain_or_url or "/v1/chat/completions" in domain_or_url:
+    # Check for Lemonade / LLM API path signatures in URL
+    if any(route in domain_or_url for route in ("/api/v1", "/v1/chat", "/models", "/health")):
         return True
 
     return False
@@ -527,12 +531,12 @@ def _record_timeout(domain):
             _set_cooldown(domain, f"blackhole-candidate ({count} timeouts in window)")
 
 
-def _build_timeout(kwargs, domain=""):
+def _build_timeout(kwargs, domain_or_url=""):
     """Return appropriate timeout settings, granting Lemonade/local endpoints higher budgets."""
     caller_timeout = kwargs.get("timeout")
 
-    # If it's Lemonade or local LAN/loopback, provide an extended timeout budget
-    if _is_lemonade_or_local_endpoint(domain):
+    # If it's Lemonade or local LAN/loopback, provide an extended 30-minute read timeout budget
+    if _is_lemonade_or_local_endpoint(domain_or_url):
         if caller_timeout is None:
             return (15.0, _LEMONADE_TIMEOUT)
         if isinstance(caller_timeout, (tuple, list)) and len(caller_timeout) == 2:
@@ -688,7 +692,7 @@ def _patch_requests():
 
         for attempt in range(max_attempts):
             request_kwargs = dict(kwargs)
-            request_kwargs["timeout"] = _build_timeout(request_kwargs, domain or url)
+            request_kwargs["timeout"] = _build_timeout(request_kwargs, url or domain)
 
             try:
                 response = original_request(self, method, url, *args, **request_kwargs)
@@ -809,7 +813,7 @@ def _patch_httpx():
 
         for attempt in range(max_attempts):
             request_kwargs = dict(kwargs)
-            request_kwargs["timeout"] = _build_timeout(request_kwargs, domain or str(url))
+            request_kwargs["timeout"] = _build_timeout(request_kwargs, str(url) or domain)
 
             try:
                 response = original_client_request(self, method, url, *args, **request_kwargs)
@@ -916,7 +920,7 @@ def _patch_httpx():
 
         for attempt in range(max_attempts):
             request_kwargs = dict(kwargs)
-            request_kwargs["timeout"] = _build_timeout(request_kwargs, domain or str(url))
+            request_kwargs["timeout"] = _build_timeout(request_kwargs, str(url) or domain)
 
             try:
                 response = await original_async_client_request(self, method, url, *args, **request_kwargs)

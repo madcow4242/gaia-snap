@@ -2,20 +2,17 @@
 set -e
 
 # =====================================================================
-# 1. SNAP CONFIGURATION DATABASE INITIALIZATION (YOUR CORE LOGIC)
+# 1. SNAP CONFIGURATION DATABASE INITIALIZATION
 # =====================================================================
 
-# Establish a generic local backend server path baseline if completely unassigned
 if [ -z "$(snapctl get backend.url)" ]; then
     snapctl set backend.url="http://127.0.0.1:13305"
 fi
 
-# Set max-steps to a reasonable default if not configured
 if [ -z "$(snapctl get backend.maxsteps)" ]; then
     snapctl set backend.maxsteps=50
 fi
 
-# Initialize empty state strings for the API credentials namespace
 for provider in openai anthropic groq tavily serper; do
     if [ -z "$(snapctl get "keys.${provider}")" ]; then
         snapctl set "keys.${provider}"=""
@@ -26,26 +23,23 @@ done
 # 2. APPLICATION WORKSPACE COMPILATION ENGINE
 # =====================================================================
 
-# Pull the freshly verified parameters natively from the core database
 URL=$(snapctl get backend.url)
 STEPS=$(snapctl get backend.maxsteps)
 
-# Strip any trailing forward-slashes from the user input safely
 CLEAN_URL=$(echo "$URL" | sed 's:/*$::')
 
-# Establish uniform API route mapping definitions matching the lemonade-server layout
 if [[ "$CLEAN_URL" == */api/v1* ]]; then
     BASE_URL="$CLEAN_URL"
 else
     BASE_URL="${CLEAN_URL}/api/v1"
 fi
 
-# Ensure the targeted local workspace directory path exists inside the user's home registry
-mkdir -p "$HOME/.gaia"
+# Write to SNAP_COMMON so all users on the host can access the snap configuration
+# instead of writing to /root/.gaia
+TARGET_DIR="$SNAP_COMMON/etc/gaia"
+mkdir -p "$TARGET_DIR"
 
-# Securely build the config manifest file directly where the binary reads it.
-# This completely bypasses Electron environment scrubbing loops on child nodes!
-cat << EOF > "$HOME/.gaia/config.json"
+cat << EOF > "$TARGET_DIR/config.json"
 {
   "llm_url": "${CLEAN_URL}",
   "backend": {
@@ -56,4 +50,4 @@ cat << EOF > "$HOME/.gaia/config.json"
 }
 EOF
 
-echo "LOG: Native configuration hook successfully initialized states and compiled workspace maps."
+echo "LOG: Global snap configuration compiled to $TARGET_DIR/config.json"
