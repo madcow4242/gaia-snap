@@ -41,8 +41,15 @@ cleanup_gaia_environment() {
     
     # Remove existing gaia-desktop snap with --purge to clean data
     if snap list gaia-desktop >/dev/null 2>&1; then
-        echo "INFO: Removing existing gaia-desktop snap (--purge)..."
-        sudo snap remove --purge gaia-desktop 2>/dev/null || true
+        # ask user if they want to --purge the old version or not, then remove with/without --purge as appropriate
+        read -p "Do you want to purge the old GAIA installation? (y/N): " purge_choice
+        if [[ "$purge_choice" =~ ^[Yy]$ ]]; then
+            echo "INFO: Removing existing gaia-desktop snap with --purge..."
+            sudo snap remove --purge gaia-desktop 2>/dev/null || true
+        else
+            echo "INFO: Removing existing gaia-desktop snap without --purge..."
+            sudo snap remove gaia-desktop 2>/dev/null || true
+        fi
         sleep 2
     fi
     
@@ -292,8 +299,14 @@ if [[ "$TOPOLOGY_CHOICE" == "1" ]]; then
 
     # Restore previous installer behavior: launch the desktop app after install
     if [ -n "${DISPLAY}" ] || [ -n "${WAYLAND_DISPLAY}" ]; then
-        echo "INFO: Launching GAIA desktop application."
-        snap run gaia-desktop >/dev/null 2>&1 &
+        # ask user if they want to launch the snap
+        read -p "Do you want to launch the GAIA desktop application now? (y/N): " launch_choice
+        if [[ "$launch_choice" =~ ^[Yy]$ ]]; then
+            echo "INFO: Launching GAIA desktop application."
+            snap run gaia-desktop >/dev/null 2>&1 &
+        else
+            echo "INFO: Skipping automatic launch of GAIA desktop application."
+        fi
     else
         echo "INFO: No graphical session detected; skipping automatic launch."
     fi

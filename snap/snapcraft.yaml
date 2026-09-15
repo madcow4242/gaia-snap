@@ -88,7 +88,23 @@ parts:
        
       echo "LOG: Installing vector index dependency (faiss-cpu)..."
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install faiss-cpu
+
+      echo "LOG: Installing MySQL connector dependency..."
+      "${CRAFT_PART_INSTALL}/venv/bin/pip" install mysql-connector-python
+
+      echo "LOG: Installing Google Workspace API client libraries..."
+      "${CRAFT_PART_INSTALL}/venv/bin/pip" install \
+        google-api-python-client \
+        google-auth \
+        google-auth-httplib2 \
+        google-auth-oauthlib \
+        google-generativeai
        
+      echo "LOG: Installing encryption libraries (for NTFY client)..."
+      "${CRAFT_PART_INSTALL}/venv/bin/pip" install \
+        cryptography \
+        requests
+
       "${CRAFT_PART_INSTALL}/venv/bin/pip" install "${CRAFT_PART_SRC}/cloned-framework/.[ui]"
 
       # ------------------------------------------------------------------

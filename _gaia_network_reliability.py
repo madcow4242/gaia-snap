@@ -89,6 +89,10 @@ _DOMAIN_COOLDOWN_SECONDS = 90.0
 _BLACKHOLE_TIMEOUT_THRESHOLD = int(os.environ.get("GAIA_BLACKHOLE_THRESHOLD", "2"))
 _BLACKHOLE_WINDOW_SECONDS = 300.0  # 5-minute rolling window
 
+# Domains to exclude from all cooldown mechanisms (including blackhole detection)
+# Hard-coded domains that should never be subject to any cooldown or circuit breaking
+_BLACKHOLE_EXCLUSION_DOMAINS = {"ntfy.sh"}  # Add domains here to exclude from all cooldown mechanisms
+
 _DOMAIN_COOLDOWNS = {}
 _DOMAIN_TIMEOUT_EVENTS = {}   # domain -> list of monotonic timestamps
 _COOLDOWN_LOCK = threading.Lock()
@@ -249,7 +253,7 @@ def _domain_requires_browser(domain):
         return False
     if not domain or not _BROWSER_REQUIRED_DOMAINS:
         return False
-    return any(domain == required or domain.endswith(f".{required}") for required in _BROWSER_REQUIRED_DOMAINS)
+    return any(domain == required or domain.endswith(f".{required}") for required in _BROWSER_REQUIRED_DOMAINS) or domain in _BLACKHOLE_EXCLUSION_DOMAINS
 
 
 def _promote_domain_to_browser(domain, reason):
@@ -485,7 +489,7 @@ def _domain_from_url(url):
 
 
 def _is_cooling_down(domain):
-    if not domain or _is_lemonade_or_local_endpoint(domain):
+    if not domain or _is_lemonade_or_local_endpoint(domain) or domain in _BLACKHOLE_EXCLUSION_DOMAINS:
         return False
 
     now = time.monotonic()
@@ -508,7 +512,7 @@ def _set_cooldown(domain, reason):
 
 
 def _record_timeout(domain):
-    if not domain or _is_lemonade_or_local_endpoint(domain):
+    if not domain or _is_lemonade_or_local_endpoint(domain) or domain in _BLACKHOLE_EXCLUSION_DOMAINS:
         return
 
     now = time.monotonic()
