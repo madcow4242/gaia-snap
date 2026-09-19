@@ -70,9 +70,9 @@ TEXT_CONTENT_MARKERS = (
 # Split connect/read timeout: TCP-connect blackholes are caught in 5s;
 # slow-read / body-stall blackholes are caught in 8s.
 _DEFAULT_CONNECT_TIMEOUT = float(os.environ.get("GAIA_CONNECT_TIMEOUT", "5"))
-_DEFAULT_READ_TIMEOUT = float(os.environ.get("GAIA_READ_TIMEOUT", "8"))
+_DEFAULT_READ_TIMEOUT = float(os.environ.get("GAIA_READ_TIMEOUT", "30"))
 # Hard cap on any caller-supplied timeout for public web traffic.
-_MAX_CALLER_TIMEOUT_SECONDS = float(os.environ.get("GAIA_MAX_CALLER_TIMEOUT", "8"))
+_MAX_CALLER_TIMEOUT_SECONDS = float(os.environ.get("GAIA_MAX_CALLER_TIMEOUT", "30"))
 
 # Timeout budget specifically for Lemonade / LLM endpoints.
 # Set to 1800s (30 minutes) by default to prevent timing out on long inference generations.

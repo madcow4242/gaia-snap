@@ -210,7 +210,7 @@ mkdir -p "${GAIA_HOME}/venv/bin"
 cat << EOF > "${GAIA_HOME}/electron-install-state.json"
 {
   "status": "ready",
-  "version": "0.23.0"
+  "version": "0.24.1"
 }
 EOF
 

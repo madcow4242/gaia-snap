@@ -71,7 +71,7 @@ parts:
       - git
     override-build: |
       # Allow GAIA_VERSION override from build environment; default to 0.23.0
-      VERSION_TAG="0.23.0"
+      VERSION_TAG="0.24.1"
        
       echo "LOG: Setting snap version metadata: ${VERSION_TAG}"
       craftctl set version="${VERSION_TAG}"
